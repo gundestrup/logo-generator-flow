@@ -409,7 +409,8 @@ func (h *editHandler) tplFill(w http.ResponseWriter, r *http.Request) {
 		}
 		dst = req.Out
 	}
-	if err := os.WriteFile(dst, []byte(filled), 0o644); err != nil { // #nosec G306 -- generated template file
+	// #nosec G306 G703 -- dst is constrained to templates/*.svg or derived from the config template path.
+	if err := os.WriteFile(dst, []byte(filled), 0o644); err != nil {
 		jsonErr(w, err)
 		return
 	}
