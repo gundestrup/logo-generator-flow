@@ -381,7 +381,16 @@
       }
 
       async function loadSites() {
-        const d = await j("GET", "/api/sites");
+        let d;
+        try {
+          d = await j("GET", "/api/sites");
+        } catch (e) {
+          status(
+            `can't load sites: ${e.message} — is -ui running from the repo root?`,
+            false,
+          );
+          return;
+        }
         $("site").innerHTML = d.sites
           .map((s) => `<option>${s}</option>`)
           .join("");
