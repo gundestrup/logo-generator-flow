@@ -38,6 +38,9 @@ func renderSite(cfg Config, outDir string) error {
 	if err != nil {
 		return err
 	}
+	if tb, rerr := os.ReadFile(cfg.Template); rerr == nil && !placeholder.Match(tb) { // #nosec G304 -- config template path
+		fmt.Printf("  note: %s: template has no {{…}} placeholders — renders as-is\n", cfg.Name)
+	}
 	// #nosec G301 -- generated web assets are intentionally world-readable.
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return err
@@ -121,7 +124,8 @@ func renderTemplate(c Config) ([]byte, error) {
 	}
 	for k, slot := range c.Images {
 		if strings.TrimSpace(slot.Src) == "" {
-			vals[k] = "" // empty slot: render nothing
+			// transparent 0x0 svg — keeps href valid so resvg stays quiet.
+			vals[k] = emptyImageURI
 			continue
 		}
 		dataURI, err := imageDataURI(slot)
@@ -192,6 +196,10 @@ func recolorDataURI(uri string, img ImageSlot) (string, error) {
 	}
 	return prefix + base64.StdEncoding.EncodeToString(recolorSVG(b, img.Fill, img.Stroke)), nil
 }
+
+// emptyImageURI substitutes an empty image slot: a valid, fully
+// transparent SVG so <image href> stays resolvable (no resvg warnings).
+const emptyImageURI = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4="
 
 var (
 	svgFillAttr   = regexp.MustCompile(`fill="([^"]*)"`)

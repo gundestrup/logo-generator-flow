@@ -97,7 +97,7 @@ func TestRenderTemplateEmptyImageSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(got), `href=""`) {
+	if !strings.Contains(string(got), `href="data:image/svg+xml;base64,`) {
 		t.Fatalf("empty slot should render empty href: %s", got)
 	}
 }

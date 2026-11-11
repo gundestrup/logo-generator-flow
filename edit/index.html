@@ -391,6 +391,12 @@
             tplBox = a.viewBox;
             for (const e of a.elements) if (e.slot) slotMap[e.id] = e.slot;
             drawRegions();
+            const unmapped = a.elements.filter((e) => !e.slot).length;
+            if (unmapped)
+              status(
+                `${unmapped} unmapped template region(s) — use map template… or the output keeps the outlines`,
+                true,
+              );
           } catch {
             regions = null;
             drawRegions();
