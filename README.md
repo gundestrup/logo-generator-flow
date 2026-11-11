@@ -188,7 +188,7 @@ avifenc installed.
 
 A toolbar adds pickers that patch the JSON directly: **pick…** opens a
 thumbnail popup of `assets/images/` for the chosen `imageN` slot (svg
-files get a fill color input), a font dropdown lists `assets/fonts/`
+files get fill + stroke color inputs and a × reset), a font dropdown lists `assets/fonts/`
 (sets `render.fontFiles` + `render.fontFamily`), and a color input sets
 the selected `textN` slot's `{"text", "color"}` object form.
 

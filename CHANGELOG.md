@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   editor, template preview, debounced SVG render, "render all formats"
   output links, and save-back to `configs/<name>.json`. Toolbar pickers
   insert `assets/images/*` into `image1-4` (with an svg fill-recolor
-  option), pick `assets/fonts/*` into `render.fontFiles`/`fontFamily`,
+  option, separate fill + stroke pickers), pick `assets/fonts/*` into `render.fontFiles`/`fontFamily`,
   and set per-slot text colors.
 - Template mapping flow: `POST /api/template-analyze` lists `id`'d
   elements with bounding boxes; `POST /api/template-fill` rewrites a

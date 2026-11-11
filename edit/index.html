@@ -279,7 +279,11 @@
         ><input type="checkbox" id="show-regions" checked /> outlines</label
       >
       <span id="img-color-wrap" hidden
-        >svg fill <input type="color" id="img-color" value="#ffffff" />
+        >svg fill <input type="color" id="img-color" value="#ffffff" /> stroke
+        <input type="color" id="img-stroke" value="#000000" />
+        <button type="button" id="img-color-clear" title="remove recolor">
+          ×
+        </button>
       </span>
       <label
         >font
@@ -379,6 +383,7 @@
           $("config").value = d.config;
           $("tpl").innerHTML = d.template || "";
           $("files").innerHTML = "";
+          syncImgColors();
           preview();
         } catch (e) {
           status(e.message, false);
@@ -466,7 +471,7 @@
                 o.images ||= {};
                 o.images[slot] = i.path;
               });
-              $("img-color-wrap").hidden = !i.svg;
+              syncImgColors();
               $("modal").hidden = true;
             };
             $("img-list").append(b);
@@ -480,23 +485,53 @@
         $("modal").hidden = true;
       };
 
-      $("img-color").oninput = () => {
+      const imgSrc = (cur) => (typeof cur === "string" ? cur : cur?.src || "");
+      const isSvgSrc = (src) =>
+        src.toLowerCase().endsWith(".svg") || src.startsWith("data:image/svg");
+
+      const setImageColor = (key, val) => {
         const slot = $("img-slot").value;
-        const fill = $("img-color").value;
         patch((o) => {
           o.images ||= {};
           const cur = o.images[slot];
-          const src = typeof cur === "string" ? cur : cur?.src || "";
-          if (
-            !src.toLowerCase().endsWith(".svg") &&
-            !src.startsWith("data:image/svg")
-          ) {
+          const src = imgSrc(cur);
+          if (!isSvgSrc(src)) {
             status("recolor needs an .svg image", false);
             return;
           }
-          o.images[slot] = { src, fill };
+          const next =
+            typeof cur === "object" && cur ? { ...cur, src } : { src };
+          if (val) next[key] = val;
+          else delete next[key];
+          o.images[slot] = next;
         });
       };
+      $("img-color").oninput = () =>
+        setImageColor("fill", $("img-color").value);
+      $("img-stroke").oninput = () =>
+        setImageColor("stroke", $("img-stroke").value);
+      $("img-color-clear").onclick = () =>
+        patch((o) => {
+          const cur = o.images?.[$("img-slot").value];
+          if (typeof cur === "object" && cur)
+            o.images[$("img-slot").value] = cur.src || "";
+        });
+
+      // reflect the slot's current colors/svg-ness in the toolbar
+      const syncImgColors = () => {
+        let src = "";
+        try {
+          const o = JSON.parse($("config").value);
+          const cur = o.images?.[$("img-slot").value];
+          src = imgSrc(cur);
+          if (cur?.fill) $("img-color").value = cur.fill;
+          if (cur?.stroke) $("img-stroke").value = cur.stroke;
+        } catch {
+          /* mid-edit json */
+        }
+        $("img-color-wrap").hidden = !isSvgSrc(src);
+      };
+      $("img-slot").onchange = syncImgColors;
 
       $("txt-color").oninput = () => {
         const slot = $("txt-slot").value;
