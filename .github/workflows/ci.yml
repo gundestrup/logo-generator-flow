@@ -83,10 +83,13 @@ jobs:
       image: semgrep/semgrep:1.181.0@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
-      # Registry rulesets need network to semgrep.dev; .semgrepignore keeps
-      # generated assets out. --error makes any finding fail the job.
+      # Public repo → Semgrep App (Pro rules, policies managed app-side).
+      # Needs SEMGREP_APP_TOKEN; local mirror stays `make semgrep`
+      # (registry p/golang + p/security-audit).
       - name: Semgrep SAST
-        run: semgrep scan --config p/golang --config p/security-audit --metrics=off --error
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        run: semgrep ci
 
   frontend:
     runs-on: ubuntu-latest
