@@ -39,7 +39,7 @@ All raster formats derive from the same PNG, so they are pixel-identical.
 
 ## Requirements
 
-- Go 1.27.3
+- Go 1.27.4
 - `resvg`, `cwebp`, `avifenc` on PATH (or set paths per config under `tools`)
 
 ```bash

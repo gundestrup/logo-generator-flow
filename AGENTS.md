@@ -44,7 +44,7 @@ avifenc or network access. `go test -race ./...` is the gate.
 - `hooks/pre-push`: `make check`, `frontend-check`, `semgrep`, `vuln-check`.
 - `SKIP_HOOKS=1` and `SEMGREP_SKIP=1` are the documented escape hatches.
 - CI (`.github/workflows/ci.yml`): all actions pinned to commit SHAs,
-  containers digest-pinned (`golang:1.27.3-trixie`, `node:26.12.1`,
+  containers digest-pinned (`golang:1.27.4-trixie`, `node:26.12.1`,
   `semgrep:1.181.0`). govulncheck is a hard gate. SonarCloud runs only when
   `SONAR_TOKEN` is set (Dependabot PRs need a Dependabot-scope secret).
 
