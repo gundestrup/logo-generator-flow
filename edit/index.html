@@ -590,16 +590,19 @@
 
       async function loadFonts() {
         try {
+          const prev = $("font").value;
           const d = await j("GET", "/api/fonts");
           $("font").innerHTML =
             `<option value="">—</option>` +
             d.fonts
               .map((f) => `<option value="${f.path}">${f.name}</option>`)
               .join("");
+          $("font").value = prev;
         } catch {
           /* no assets/fonts dir */
         }
       }
+      $("font").onfocus = loadFonts; // rescan assets/fonts on every open
       $("font").onchange = () => {
         const path = $("font").value;
         if (!path) return;
