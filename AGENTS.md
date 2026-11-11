@@ -29,6 +29,7 @@ make frontend-check  # biome lint + prettier check (npm run check)
 make ready           # check + frontend + deps/semgrep/vuln scans (needs network)
 make run             # build + render all configs/*.json
 make demo            # render sites + serve GUI demo on :8080
+make edit            # browser editor — live JSON editing on 127.0.0.1:8181
 make demo-media      # rebuild docs/assets/demo media (Chrome + ffmpeg + img2webp)
 make install-hooks   # point core.hooksPath at hooks/ (run once per clone)
 ```

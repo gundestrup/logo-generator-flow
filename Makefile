@@ -3,7 +3,7 @@ LDFLAGS := -s -w -X main.version=$(APP_VERSION)
 BIN := logo-generator
 
 .PHONY: all build run test test-race cover fmt fmt-check vet lint semgrep \
-	vuln-check deps-check demo demo-media frontend-check version-check \
+	vuln-check deps-check demo demo-media edit frontend-check version-check \
 	install-hooks quality ready clean
 
 build:
@@ -59,6 +59,9 @@ deps-check:
 # SEMGREP_SKIP=1 bypasses it in the pre-commit hook when offline.
 semgrep:
 	semgrep scan --config p/golang --config p/security-audit --metrics=off --timeout 30 --error
+
+edit: build
+	./$(BIN) -edit
 
 demo: build
 	./$(BIN)

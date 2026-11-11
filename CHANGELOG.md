@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Browser editor (`-edit` / `make edit`): loopback UI on
+  `http://127.0.0.1:8181/` with a live JSON editor, template preview,
+  debounced SVG render, "render all formats" output links, and save-back
+  to `configs/<name>.json`.
+
 ## [0.1.1] - 2026-11-11
 
 ### Fixed

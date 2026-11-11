@@ -166,6 +166,19 @@ Open <http://localhost:8080/demo/> — a three-pane view per site: the JSON
 config, the raw template (placeholders visible), and the generated output
 with all produced raster formats.
 
+### Interactive editor
+
+```bash
+make edit   # ./logo-generator -edit → http://127.0.0.1:8181/
+```
+
+The editor is a loopback-only UI (same three-pane layout) where you can
+edit a site's JSON, watch the SVG re-render live as you type, run
+**render all formats** to write `output/<name>/logo.*`, and **save** the
+config back to `configs/<name>.json`. No rasters are produced while
+editing — preview is SVG-only, so it works even without resvg/cwebp/
+avifenc installed.
+
 ## Development
 
 ```bash
@@ -176,6 +189,7 @@ make cover        # tests + HTML coverage report
 make vuln-check   # govulncheck reachable-advisory scan
 make deps-check   # list modules with updates available
 make demo         # render sites + serve GUI demo on :8080
+make edit         # browser editor — live config editing on :8181
 make demo-media   # scripts/docs-demo.sh → docs/assets/demo/*.{png,apng,webp,avif,svg}
 make install-hooks # point core.hooksPath at hooks/ — run once per clone
 ```
