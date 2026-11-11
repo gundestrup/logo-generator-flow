@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -64,6 +66,8 @@ func doEdit(h *editHandler, method, target, body string) *httptest.ResponseRecor
 		h.assetList("assets/fonts", "fonts")(w, req)
 	case strings.HasPrefix(target, "/out/"):
 		h.outputFile(w, req)
+	case target == "/api/ping":
+		h.ping(w, req)
 	}
 	return w
 }
@@ -276,5 +280,63 @@ func TestTemplateFill(t *testing.T) {
 	}
 	if _, err := templateFill(svg, map[string]string{"image1": "Nope"}); err == nil {
 		t.Fatal("expected missing-id error")
+	}
+}
+
+func TestEditPing(t *testing.T) {
+	h := &editHandler{configsPath: t.TempDir(), outDir: t.TempDir()}
+	w := doEdit(h, "GET", "/api/ping", "")
+	if w.Code != 200 {
+		t.Fatalf("status %d", w.Code)
+	}
+	var p struct {
+		App string `json:"app"`
+		PID int    `json:"pid"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.App != "logo-generator" || p.PID <= 0 {
+		t.Fatalf("unexpected ping: %+v", p)
+	}
+}
+
+func TestStopStaleEditor(t *testing.T) {
+	var gotShutdown bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/ping":
+			writeJSON(w, 200, map[string]any{"app": "logo-generator", "pid": 123})
+		case "/api/shutdown":
+			gotShutdown = true
+			writeJSON(w, 200, map[string]bool{"ok": true})
+		}
+	}))
+	defer srv.Close()
+	if !stopStaleEditor(strings.TrimPrefix(srv.URL, "http://")) {
+		t.Fatal("expected stale editor to be stopped")
+	}
+	if !gotShutdown {
+		t.Fatal("shutdown endpoint was never called")
+	}
+}
+
+func TestStopStaleEditorForeign(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]string{"app": "other"})
+	}))
+	defer srv.Close()
+	if stopStaleEditor(strings.TrimPrefix(srv.URL, "http://")) {
+		t.Fatal("foreign process must not be stopped")
+	}
+	// Nothing listening at all.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	if stopStaleEditor(addr) {
+		t.Fatal("dead port must not report success")
 	}
 }

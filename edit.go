@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 //go:embed edit/index.html
@@ -36,10 +40,82 @@ func serveEdit(configsPath, outDir string) error {
 	mux.HandleFunc("POST /api/preview", h.preview)
 	mux.HandleFunc("POST /api/render", h.renderAll)
 	mux.HandleFunc("POST /api/save", h.save)
+	mux.HandleFunc("GET /api/ping", h.ping)
+	srv := &http.Server{Handler: mux} // #nosec G112 -- loopback dev tool
+	mux.HandleFunc("POST /api/shutdown", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = srv.Shutdown(ctx)
+		}()
+	})
 	addr := "127.0.0.1:8181"
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		if !stopStaleEditor(addr) {
+			return fmt.Errorf("editor: %w (port held by a different process?)", err)
+		}
+		if ln, err = listenWhenFree(addr, 3*time.Second); err != nil {
+			return err
+		}
+	}
 	fmt.Println("editor: http://" + addr + "/  (Ctrl+C to stop)")
 	// nosemgrep: go.lang.security.audit.net.use-tls.use-tls
-	return http.ListenAndServe(addr, mux) // #nosec G114 -- loopback dev tool, read-only timeouts acceptable
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) { // #nosec G114 -- loopback dev tool
+		return err
+	}
+	return nil
+}
+
+// ping identifies this editor so a newly started instance can recognise (and
+// stop) a stale process still holding the port.
+func (h *editHandler) ping(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"app":     "logo-generator",
+		"version": version,
+		"pid":     os.Getpid(),
+	})
+}
+
+// stopStaleEditor asks a previous logo-generator editor on addr to shut down.
+// Returns false if whatever holds the port isn't this program.
+func stopStaleEditor(addr string) bool {
+	cli := &http.Client{Timeout: 500 * time.Millisecond}
+	res, err := cli.Get("http://" + addr + "/api/ping")
+	if err != nil {
+		return false
+	}
+	defer func() { _ = res.Body.Close() }()
+	var p struct {
+		App     string `json:"app"`
+		Version string `json:"version"`
+		PID     int    `json:"pid"`
+	}
+	if json.NewDecoder(res.Body).Decode(&p) != nil || p.App != "logo-generator" {
+		return false
+	}
+	resp, err := cli.Post("http://"+addr+"/api/shutdown", "", nil)
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	fmt.Printf("editor: stopped previous instance (pid %d, v%s)\n", p.PID, p.Version)
+	return true
+}
+
+func listenWhenFree(addr string, timeout time.Duration) (net.Listener, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			return ln, nil
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("editor: port still busy after stopping previous instance: %w", err)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 type editHandler struct {
