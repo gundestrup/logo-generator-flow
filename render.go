@@ -453,25 +453,20 @@ func styledText(s string) string {
 			return
 		}
 		b.WriteString("<tspan")
-		if cur.w != "" {
-			b.WriteString(` font-weight="` + cur.w + `"`)
+		attr := func(name, val string) {
+			if val != "" {
+				fmt.Fprintf(&b, ` %s="%s"`, name, val)
+			}
 		}
-		if cur.i != "" {
-			b.WriteString(` font-style="` + cur.i + `"`)
-		}
-		if cur.u != "" {
-			b.WriteString(` text-decoration="` + cur.u + `"`)
-		}
-		if cur.fill != "" {
-			b.WriteString(` fill="` + cur.fill + `"`)
-		}
-		if cur.fam != "" {
-			b.WriteString(` font-family="` + cur.fam + `"`)
-		}
-		if cur.size != "" {
-			b.WriteString(` font-size="` + cur.size + `"`)
-		}
-		b.WriteString(">" + html.EscapeString(seg) + "</tspan>")
+		attr("font-weight", cur.w)
+		attr("font-style", cur.i)
+		attr("text-decoration", cur.u)
+		attr("fill", cur.fill)
+		attr("font-family", cur.fam)
+		attr("font-size", cur.size)
+		b.WriteString(">")
+		b.WriteString(html.EscapeString(seg))
+		b.WriteString("</tspan>")
 	}
 	push := func(mut func()) {
 		stack = append(stack, cur)
