@@ -124,6 +124,62 @@
         font-size: 12px;
         min-height: 1.6em;
       }
+      .tools {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+        color: var(--dim);
+      }
+      input[type="color"] {
+        width: 34px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--panel);
+        cursor: pointer;
+      }
+      #modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(4, 10, 20, 0.7);
+        display: grid;
+        place-items: center;
+        z-index: 10;
+      }
+      #modal[hidden] {
+        display: none;
+      }
+      .dlg {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+        width: min(560px, 90vw);
+        max-height: 80vh;
+        overflow: auto;
+      }
+      .dlg h2 {
+        margin: 0 0 10px;
+        font-size: 14px;
+      }
+      .pick {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        margin: 4px 0;
+        text-align: left;
+      }
+      .pick img {
+        width: 40px;
+        height: 40px;
+        object-fit: contain;
+        background: #0a0f1a;
+        border-radius: 6px;
+      }
       #status.err {
         color: #f87171;
       }
@@ -150,6 +206,37 @@
       <button type="button" id="save" class="primary">save</button>
       <span id="status"></span>
     </header>
+    <div class="tools">
+      <label
+        >image
+        <select id="img-slot">
+          <option>image1</option>
+          <option>image2</option>
+          <option>image3</option>
+          <option>image4</option>
+        </select>
+      </label>
+      <button type="button" id="pick-img">pick…</button>
+      <span id="img-color-wrap" hidden
+        >svg fill <input type="color" id="img-color" value="#ffffff" />
+      </span>
+      <label
+        >font
+        <select id="font">
+          <option value="">—</option>
+        </select></label
+      >
+      <label
+        >text
+        <select id="txt-slot">
+          <option>text1</option>
+          <option>text2</option>
+          <option>text3</option>
+          <option>text4</option>
+        </select>
+        <input type="color" id="txt-color" value="#ffffff" />
+      </label>
+    </div>
     <div class="grid">
       <section class="card">
         <h2>config</h2>
@@ -168,6 +255,13 @@
           <div class="files" id="files"></div>
         </div>
       </section>
+    </div>
+    <div id="modal" hidden>
+      <div class="dlg">
+        <h2>assets/images</h2>
+        <div id="img-list"></div>
+        <button type="button" id="modal-close">close</button>
+      </div>
     </div>
     <script>
       const $ = (id) => document.getElementById(id);
@@ -228,6 +322,110 @@
       }
 
       $("config").oninput = preview;
+      const patch = (fn) => {
+        let o;
+        try {
+          o = JSON.parse($("config").value);
+        } catch {
+          status("invalid JSON", false);
+          return;
+        }
+        fn(o);
+        $("config").value = JSON.stringify(o, null, 2);
+        preview();
+      };
+
+      $("pick-img").onclick = async () => {
+        try {
+          const d = await j("GET", "/api/images");
+          if (!d.images.length) {
+            status("no files in assets/images", false);
+            return;
+          }
+          $("img-list").innerHTML = "";
+          for (const i of d.images) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "pick";
+            const img = document.createElement("img");
+            img.src = `/asset/${i.path.replace("assets/", "")}`;
+            img.alt = "";
+            b.append(img, document.createTextNode(i.name));
+            b.onclick = () => {
+              const slot = $("img-slot").value;
+              patch((o) => {
+                o.images ||= {};
+                o.images[slot] = i.path;
+              });
+              $("img-color-wrap").hidden = !i.svg;
+              $("modal").hidden = true;
+            };
+            $("img-list").append(b);
+          }
+          $("modal").hidden = false;
+        } catch (e) {
+          status(e.message, false);
+        }
+      };
+      $("modal-close").onclick = () => {
+        $("modal").hidden = true;
+      };
+
+      $("img-color").oninput = () => {
+        const slot = $("img-slot").value;
+        const fill = $("img-color").value;
+        patch((o) => {
+          o.images ||= {};
+          const cur = o.images[slot];
+          const src = typeof cur === "string" ? cur : cur?.src || "";
+          if (
+            !src.toLowerCase().endsWith(".svg") &&
+            !src.startsWith("data:image/svg")
+          ) {
+            status("recolor needs an .svg image", false);
+            return;
+          }
+          o.images[slot] = { src, fill };
+        });
+      };
+
+      $("txt-color").oninput = () => {
+        const slot = $("txt-slot").value;
+        const color = $("txt-color").value;
+        patch((o) => {
+          o.text ||= {};
+          const cur = o.text[slot];
+          const text = typeof cur === "string" ? cur : cur?.text || "";
+          o.text[slot] = { text, color };
+        });
+      };
+
+      async function loadFonts() {
+        try {
+          const d = await j("GET", "/api/fonts");
+          $("font").innerHTML =
+            `<option value="">—</option>` +
+            d.fonts
+              .map((f) => `<option value="${f.path}">${f.name}</option>`)
+              .join("");
+        } catch {
+          /* no assets/fonts dir */
+        }
+      }
+      $("font").onchange = () => {
+        const path = $("font").value;
+        if (!path) return;
+        const family = path
+          .split("/")
+          .pop()
+          .replace(/\.[^.]+$/, "");
+        patch((o) => {
+          o.render ||= {};
+          o.render.fontFiles = [path];
+          o.render.fontFamily = family;
+        });
+      };
+      loadFonts();
       $("save").onclick = async () => {
         try {
           const name = $("site").value;

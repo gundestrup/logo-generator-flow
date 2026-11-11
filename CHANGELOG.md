@@ -10,9 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Browser editor (`-edit` / `make edit`): loopback UI on
-  `http://127.0.0.1:8181/` with a live JSON editor, template preview,
-  debounced SVG render, "render all formats" output links, and save-back
-  to `configs/<name>.json`.
+  `http://127.0.0.1:8181/` (flag: `-ui`, alias `-edit`) with a live JSON
+  editor, template preview, debounced SVG render, "render all formats"
+  output links, and save-back to `configs/<name>.json`. Toolbar pickers
+  insert `assets/images/*` into `image1-4` (with an svg fill-recolor
+  option), pick `assets/fonts/*` into `render.fontFiles`/`fontFamily`,
+  and set per-slot text colors.
+- Slot object forms: `textN` may be `{"text": "...", "color": "#rrggbb"}`
+  (renders via `<tspan fill>`), and `imageN` may be
+  `{"src": "...", "fill": "#hex", "stroke": "#hex"}` — fill/stroke
+  recolor `.svg` sources only, rewriting attributes and keeping
+  `fill="none"`.
 
 ## [0.1.1] - 2026-11-11
 

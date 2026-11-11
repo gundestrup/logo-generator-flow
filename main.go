@@ -21,7 +21,8 @@ func main() {
 	outDir := flag.String("out", "output", "output root directory")
 	sitesFlag := flag.String("sites", "", "comma-separated site names to render (default: all)")
 	versionFlag := flag.Bool("version", false, "print version and exit")
-	editFlag := flag.Bool("edit", false, "start the browser editor on http://127.0.0.1:8181/")
+	editFlag := flag.Bool("edit", false, "start the browser editor (alias for -ui)")
+	uiFlag := flag.Bool("ui", false, "start the browser UI on http://127.0.0.1:8181/")
 	flag.Parse()
 
 	if *versionFlag {
@@ -29,7 +30,7 @@ func main() {
 		return
 	}
 
-	if *editFlag {
+	if *editFlag || *uiFlag {
 		if err := serveEdit(*configsPath, *outDir); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
 			os.Exit(1)

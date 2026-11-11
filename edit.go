@@ -24,6 +24,9 @@ func serveEdit(configsPath, outDir string) error {
 	mux.HandleFunc("GET /{$}", h.index)
 	mux.HandleFunc("GET /api/sites", h.sites)
 	mux.HandleFunc("GET /api/site", h.site)
+	mux.HandleFunc("GET /api/images", h.assetList("assets/images", "images"))
+	mux.HandleFunc("GET /api/fonts", h.assetList("assets/fonts", "fonts"))
+	mux.HandleFunc("GET /asset/", h.assetFile)
 	mux.HandleFunc("GET /out/", h.outputFile)
 	mux.HandleFunc("POST /api/preview", h.preview)
 	mux.HandleFunc("POST /api/render", h.renderAll)
@@ -179,9 +182,43 @@ func (h *editHandler) save(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"saved": path})
 }
 
+// assetList serves the contents of an assets subdirectory as
+// {key: [{name, path, svg}]}; a missing dir yields an empty list.
+func (h *editHandler) assetList(dir, key string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		items := []map[string]any{}
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, e := range entries {
+				if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+					continue
+				}
+				items = append(items, map[string]any{
+					"name": e.Name(),
+					"path": filepath.ToSlash(filepath.Join(dir, e.Name())),
+					"svg":  strings.HasSuffix(strings.ToLower(e.Name()), ".svg"),
+				})
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{key: items})
+	}
+}
+
+// assetFile serves files under assets/images or assets/fonts for previews.
+func (h *editHandler) assetFile(w http.ResponseWriter, r *http.Request) {
+	p := strings.TrimPrefix(r.URL.Path, "/asset/")
+	rel := filepath.FromSlash(strings.TrimPrefix(
+		filepath.Clean("/"+strings.Trim(filepath.FromSlash(p), "/")), "/"))
+	sub := strings.SplitN(rel, "/", 2)
+	if len(sub) != 2 || (sub[0] != "images" && sub[0] != "fonts") {
+		jsonErr(w, fmt.Errorf("invalid asset path"))
+		return
+	}
+	http.ServeFile(w, r, filepath.Join("assets", rel)) // #nosec G703 -- path is root-anchored Clean + restricted to images|fonts
+}
+
 func (h *editHandler) outputFile(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimPrefix(r.URL.Path, "/out/")
 	// Anchor cleaning at "/" so ".." can never escape outDir.
 	rel := filepath.FromSlash(filepath.Clean("/" + strings.Trim(filepath.FromSlash(p), "/")))
-	http.ServeFile(w, r, filepath.Join(h.outDir, rel))
+	http.ServeFile(w, r, filepath.Join(h.outDir, rel)) // #nosec G703 -- path is root-anchored Clean, cannot escape outDir
 }

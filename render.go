@@ -113,14 +113,18 @@ func renderTemplate(c Config) ([]byte, error) {
 	}
 	vals := map[string]string{}
 	for k, v := range c.Text {
-		vals[k] = html.EscapeString(v)
+		esc := html.EscapeString(v.Value)
+		if v.Color != "" {
+			esc = `<tspan fill="` + v.Color + `">` + esc + `</tspan>`
+		}
+		vals[k] = esc
 	}
-	for k, source := range c.Images {
-		if strings.TrimSpace(source) == "" {
+	for k, slot := range c.Images {
+		if strings.TrimSpace(slot.Src) == "" {
 			vals[k] = "" // empty slot: render nothing
 			continue
 		}
-		dataURI, err := imageDataURI(source)
+		dataURI, err := imageDataURI(slot)
 		if err != nil {
 			return nil, fmt.Errorf("image %s: %w", k, err)
 		}
@@ -148,8 +152,12 @@ func renderTemplate(c Config) ([]byte, error) {
 	return []byte(result), nil
 }
 
-func imageDataURI(source string) (string, error) {
+func imageDataURI(img ImageSlot) (string, error) {
+	source := img.Src
 	if strings.HasPrefix(source, "data:") {
+		if img.Fill != "" || img.Stroke != "" {
+			return recolorDataURI(source, img)
+		}
 		return source, nil
 	}
 	if u, err := url.Parse(source); err == nil && u.Scheme != "" && u.Scheme != "file" {
@@ -164,7 +172,57 @@ func imageDataURI(source string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if img.Fill != "" || img.Stroke != "" {
+		if mime != "image/svg+xml" {
+			return "", errors.New("fill/stroke recolor requires an .svg image")
+		}
+		b = recolorSVG(b, img.Fill, img.Stroke)
+	}
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b), nil
+}
+
+func recolorDataURI(uri string, img ImageSlot) (string, error) {
+	const prefix = "data:image/svg+xml;base64,"
+	if !strings.HasPrefix(uri, prefix) {
+		return "", errors.New("recolor requires a base64 image/svg+xml data URI")
+	}
+	b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(uri, prefix))
+	if err != nil {
+		return "", err
+	}
+	return prefix + base64.StdEncoding.EncodeToString(recolorSVG(b, img.Fill, img.Stroke)), nil
+}
+
+var (
+	svgFillAttr   = regexp.MustCompile(`fill="([^"]*)"`)
+	svgStrokeAttr = regexp.MustCompile(`stroke="([^"]*)"`)
+)
+
+// recolorSVG rewrites fill/stroke attribute values (keeping "none"); a fill
+// is injected on the root <svg> when the document declares none at all.
+func recolorSVG(b []byte, fill, stroke string) []byte {
+	s := string(b)
+	if fill != "" {
+		if svgFillAttr.MatchString(s) {
+			s = svgFillAttr.ReplaceAllStringFunc(s, func(m string) string {
+				if m == `fill="none"` {
+					return m
+				}
+				return `fill="` + fill + `"`
+			})
+		} else {
+			s = strings.Replace(s, "<svg", `<svg fill="`+fill+`"`, 1)
+		}
+	}
+	if stroke != "" {
+		s = svgStrokeAttr.ReplaceAllStringFunc(s, func(m string) string {
+			if m == `stroke="none"` {
+				return m
+			}
+			return `stroke="` + stroke + `"`
+		})
+	}
+	return []byte(s)
 }
 
 func mimeFor(path string) (string, error) {

@@ -112,6 +112,12 @@ fontFiles) resolve against the working directory.
 
 Rules:
 
+- `text.<textN>` may also be `{"text": "...", "color": "#rrggbb"}` —
+  rendered wrapped in `<tspan fill>` so it overrides the template fill
+- `images.<imageN>` may also be `{"src": "...", "fill": "#hex",
+"stroke": "#hex"}` — recolors `.svg` sources (fill/stroke attrs are
+  rewritten, `fill="none"` preserved, fill injected when absent);
+  non-SVG sources reject fill/stroke
 - `name` is required and becomes the output subdirectory
   (`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`); names must be unique across configs.
 - `template` is required and points at the original (unfilled) SVG template —
@@ -169,7 +175,7 @@ with all produced raster formats.
 ### Interactive editor
 
 ```bash
-make edit   # ./logo-generator -edit → http://127.0.0.1:8181/
+make edit   # ./logo-generator -ui (or -edit) → http://127.0.0.1:8181/
 ```
 
 The editor is a loopback-only UI (same three-pane layout) where you can
@@ -178,6 +184,12 @@ edit a site's JSON, watch the SVG re-render live as you type, run
 config back to `configs/<name>.json`. No rasters are produced while
 editing — preview is SVG-only, so it works even without resvg/cwebp/
 avifenc installed.
+
+A toolbar adds pickers that patch the JSON directly: **pick…** opens a
+thumbnail popup of `assets/images/` for the chosen `imageN` slot (svg
+files get a fill color input), a font dropdown lists `assets/fonts/`
+(sets `render.fontFiles` + `render.fontFamily`), and a color input sets
+the selected `textN` slot's `{"text", "color"}` object form.
 
 ## Development
 

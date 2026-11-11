@@ -15,13 +15,13 @@ import (
 // Config is one site definition from a JSON file in the configs directory.
 // Relative paths (template, images) resolve against the working directory.
 type Config struct {
-	Name     string            `json:"name"`
-	Template string            `json:"template"`
-	Output   OutputConfig      `json:"output"`
-	Render   RenderConfig      `json:"render"`
-	Tools    ToolConfig        `json:"tools"`
-	Text     map[string]string `json:"text"`
-	Images   map[string]string `json:"images"`
+	Name     string               `json:"name"`
+	Template string               `json:"template"`
+	Output   OutputConfig         `json:"output"`
+	Render   RenderConfig         `json:"render"`
+	Tools    ToolConfig           `json:"tools"`
+	Text     map[string]TextSlot  `json:"text"`
+	Images   map[string]ImageSlot `json:"images"`
 }
 
 type OutputConfig struct {
@@ -42,6 +42,56 @@ type RenderConfig struct {
 	FontsDir        string   `json:"fontsDir"`
 	FontFiles       []string `json:"fontFiles"`
 	SkipSystemFonts bool     `json:"skipSystemFonts"`
+}
+
+// TextSlot fills a {{textN}} placeholder — a plain string, or
+// {"text": "...", "color": "#rrggbb"} to recolor via a <tspan> wrapper.
+type TextSlot struct {
+	Value string
+	Color string
+}
+
+func (s *TextSlot) UnmarshalJSON(b []byte) error {
+	if bytes.HasPrefix(bytes.TrimSpace(b), []byte(`"`)) {
+		return json.Unmarshal(b, &s.Value)
+	}
+	var o struct {
+		Text  string `json:"text"`
+		Color string `json:"color"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&o); err != nil {
+		return err
+	}
+	s.Value, s.Color = o.Text, o.Color
+	return nil
+}
+
+// ImageSlot fills an {{imageN}} placeholder — a path/data-URI string, or
+// {"src": "...", "fill": "#hex", "stroke": "#hex"}; recolor requires an .svg.
+type ImageSlot struct {
+	Src    string
+	Fill   string
+	Stroke string
+}
+
+func (s *ImageSlot) UnmarshalJSON(b []byte) error {
+	if bytes.HasPrefix(bytes.TrimSpace(b), []byte(`"`)) {
+		return json.Unmarshal(b, &s.Src)
+	}
+	var o struct {
+		Src    string `json:"src"`
+		Fill   string `json:"fill"`
+		Stroke string `json:"stroke"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&o); err != nil {
+		return err
+	}
+	s.Src, s.Fill, s.Stroke = o.Src, o.Fill, o.Stroke
+	return nil
 }
 
 type ToolConfig struct {
@@ -126,17 +176,42 @@ func validateIdentity(c Config) error {
 }
 
 func validateSlots(c Config) error {
-	for key := range c.Text {
+	for key, s := range c.Text {
 		if !textSlot.MatchString(key) {
 			return fmt.Errorf("invalid text field %q: use text1-text4", key)
 		}
+		if err := validColor(s.Color); err != nil {
+			return fmt.Errorf("text %s color: %w", key, err)
+		}
 	}
-	for key := range c.Images {
+	for key, s := range c.Images {
 		if !imgSlot.MatchString(key) {
 			return fmt.Errorf("invalid image field %q: use image1-image4", key)
 		}
+		for name, col := range map[string]string{"fill": s.Fill, "stroke": s.Stroke} {
+			if err := validColor(col); err != nil {
+				return fmt.Errorf("image %s %s: %w", key, name, err)
+			}
+		}
+		if (s.Fill != "" || s.Stroke != "") && !isSVGSource(s.Src) {
+			return fmt.Errorf("image %s: recolor requires an .svg source", key)
+		}
 	}
 	return nil
+}
+
+// validColor rejects malformed colors; empty means "not set".
+func validColor(s string) error {
+	if s == "" {
+		return nil
+	}
+	_, err := parseColor(s)
+	return err
+}
+
+func isSVGSource(src string) bool {
+	l := strings.ToLower(strings.TrimSpace(src))
+	return strings.HasSuffix(l, ".svg") || strings.HasPrefix(l, "data:image/svg")
 }
 
 func validateRender(r RenderConfig) error {

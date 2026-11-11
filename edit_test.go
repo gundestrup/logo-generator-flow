@@ -22,15 +22,19 @@ func newEditTestHandler(t *testing.T) *editHandler {
 	t.Helper()
 	root := t.TempDir()
 	configs := filepath.Join(root, "configs")
+	// #nosec G301 -- test fixture dir
 	if err := os.MkdirAll(filepath.Join(root, "templates"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G301 -- test fixture dir
 	if err := os.MkdirAll(configs, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G306 -- test fixture file
 	if err := os.WriteFile(filepath.Join(configs, "acme.json"), []byte(editTestConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G306 -- test fixture file
 	if err := os.WriteFile(filepath.Join(root, "templates", "logo.svg"), []byte(editTestTemplate), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +56,12 @@ func doEdit(h *editHandler, method, target, body string) *httptest.ResponseRecor
 		h.renderAll(w, req)
 	case strings.HasPrefix(target, "/api/save"):
 		h.save(w, req)
+	case strings.HasPrefix(target, "/asset/"):
+		h.assetFile(w, req)
+	case strings.HasPrefix(target, "/api/images"):
+		h.assetList("assets/images", "images")(w, req)
+	case strings.HasPrefix(target, "/api/fonts"):
+		h.assetList("assets/fonts", "fonts")(w, req)
 	case strings.HasPrefix(target, "/out/"):
 		h.outputFile(w, req)
 	}
@@ -162,9 +172,11 @@ func TestEditRenderAll(t *testing.T) {
 
 func TestOutputFile(t *testing.T) {
 	h := newEditTestHandler(t)
+	// #nosec G301 -- test fixture in a private t.TempDir().
 	if err := os.MkdirAll(filepath.Join(h.outDir, "acme"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// #nosec G306 -- test fixture in a private t.TempDir().
 	if err := os.WriteFile(filepath.Join(h.outDir, "acme", "logo.svg"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -173,5 +185,62 @@ func TestOutputFile(t *testing.T) {
 	}
 	if w := doEdit(h, "GET", "/out/../configs/acme.json", ""); w.Code == 200 {
 		t.Fatal("traversal was served")
+	}
+}
+
+func TestEditAssets(t *testing.T) {
+	h := newEditTestHandler(t)
+	// #nosec G301 -- test fixture dir
+	if err := os.MkdirAll("assets/images", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// #nosec G306 -- test fixture file
+	if err := os.WriteFile("assets/images/badge.svg", []byte("<svg/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := doEdit(h, "GET", "/api/images", "")
+	var res struct {
+		Images []struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+			SVG  bool   `json:"svg"`
+		} `json:"images"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Images) != 1 || res.Images[0].Name != "badge.svg" || !res.Images[0].SVG {
+		t.Fatalf("images = %+v", res.Images)
+	}
+	// fonts dir missing → empty list, not an error
+	w = doEdit(h, "GET", "/api/fonts", "")
+	if w.Code != 200 {
+		t.Fatalf("fonts status %d", w.Code)
+	}
+	// asset file serves + rejects non-asset paths
+	if w := doEdit(h, "GET", "/asset/images/badge.svg", ""); w.Code != 200 {
+		t.Fatalf("asset status %d", w.Code)
+	}
+	if w := doEdit(h, "GET", "/asset/../configs/acme.json", ""); w.Code == 200 {
+		t.Fatal("asset traversal was served")
+	}
+}
+
+func TestEditPreviewObjectSlots(t *testing.T) {
+	h := newEditTestHandler(t)
+	cfg := `{"name":"acme","template":"templates/logo.svg","output":{"formats":["svg"]},
+		"text":{"text1":{"text":"Styled","color":"#ff0000"},"text2":"","text3":"","text4":""}}`
+	w := doEdit(h, "POST", "/api/preview", cfg)
+	if w.Code != 200 {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	var res struct {
+		SVG string `json:"svg"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(res.SVG, `<tspan fill="#ff0000">Styled</tspan>`) {
+		t.Fatalf("missing tspan: %s", res.SVG)
 	}
 }

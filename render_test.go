@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"image"
 	"image/color"
 	"image/png"
@@ -63,7 +64,7 @@ func TestRenderTemplate(t *testing.T) {
 
 	cfg := Config{
 		Template: tpl,
-		Text:     map[string]string{"text1": `A <B> & "C"`, "text2": ""},
+		Text:     map[string]TextSlot{"text1": {Value: `A <B> & "C"`}, "text2": {Value: ""}},
 	}
 	got, err := renderTemplate(cfg)
 	if err != nil {
@@ -82,7 +83,7 @@ func TestRenderTemplateUnresolved(t *testing.T) {
 	dir := t.TempDir()
 	tpl := filepath.Join(dir, "t.svg")
 	writeFile(t, tpl, `<svg>{{text1}} {{image3}}</svg>`)
-	_, err := renderTemplate(Config{Template: tpl, Text: map[string]string{"text1": "x"}})
+	_, err := renderTemplate(Config{Template: tpl, Text: map[string]TextSlot{"text1": {Value: "x"}}})
 	if err == nil || !strings.Contains(err.Error(), "unresolved placeholders: image3") {
 		t.Fatalf("want unresolved error, got %v", err)
 	}
@@ -92,7 +93,7 @@ func TestRenderTemplateEmptyImageSlot(t *testing.T) {
 	dir := t.TempDir()
 	tpl := filepath.Join(dir, "t.svg")
 	writeFile(t, tpl, `<svg><image href="{{image1}}"/></svg>`)
-	got, err := renderTemplate(Config{Template: tpl, Images: map[string]string{"image1": "  "}})
+	got, err := renderTemplate(Config{Template: tpl, Images: map[string]ImageSlot{"image1": {Src: "  "}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +109,7 @@ func TestRenderTemplateImageDataURI(t *testing.T) {
 	tpl := filepath.Join(dir, "t.svg")
 	writeFile(t, tpl, `<svg><image href="{{image1}}"/></svg>`)
 
-	got, err := renderTemplate(Config{Template: tpl, Images: map[string]string{"image1": imgPath}})
+	got, err := renderTemplate(Config{Template: tpl, Images: map[string]ImageSlot{"image1": {Src: imgPath}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,21 +119,21 @@ func TestRenderTemplateImageDataURI(t *testing.T) {
 }
 
 func TestImageDataURI(t *testing.T) {
-	if got, err := imageDataURI("data:image/png;base64,AAAA"); err != nil || got != "data:image/png;base64,AAAA" {
+	if got, err := imageDataURI(ImageSlot{Src: "data:image/png;base64,AAAA"}); err != nil || got != "data:image/png;base64,AAAA" {
 		t.Fatalf("data URI passthrough: %q %v", got, err)
 	}
 	for _, src := range []string{"https://x/p.png", "http://x/p.png"} {
-		if _, err := imageDataURI(src); err == nil {
+		if _, err := imageDataURI(ImageSlot{Src: src}); err == nil {
 			t.Fatalf("remote URL %q should be rejected", src)
 		}
 	}
-	if _, err := imageDataURI(filepath.Join(t.TempDir(), "missing.png")); err == nil {
+	if _, err := imageDataURI(ImageSlot{Src: filepath.Join(t.TempDir(), "missing.png")}); err == nil {
 		t.Fatal("missing file should error")
 	}
 	dir := t.TempDir()
 	gif := filepath.Join(dir, "x.gif")
 	writeFile(t, gif, "GIF89a")
-	if _, err := imageDataURI(gif); err == nil || !strings.Contains(err.Error(), "unsupported image type") {
+	if _, err := imageDataURI(ImageSlot{Src: gif}); err == nil || !strings.Contains(err.Error(), "unsupported image type") {
 		t.Fatalf("want unsupported type error, got %v", err)
 	}
 }
@@ -231,7 +232,7 @@ func TestRenderSiteSVGOnly(t *testing.T) {
 	writeFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
 	out := filepath.Join(dir, "out", "site")
 
-	cfg := Config{Template: tpl, Text: map[string]string{"text1": "Hello"}}
+	cfg := Config{Template: tpl, Text: map[string]TextSlot{"text1": {Value: "Hello"}}}
 	cfg.Output.Formats = []string{"svg"}
 	if err := renderSite(cfg, out); err != nil {
 		t.Fatal(err)
@@ -265,7 +266,7 @@ func TestRenderSiteFakeTools(t *testing.T) {
 
 	cfg := Config{
 		Template: tpl,
-		Text:     map[string]string{"text1": "x"},
+		Text:     map[string]TextSlot{"text1": {Value: "x"}},
 		Tools: ToolConfig{
 			Resvg:   fakeTool(t, bin, "resvg", fixture),
 			CWebP:   fakeTool(t, bin, "cwebp", ""),
@@ -297,7 +298,7 @@ func TestRenderSiteRemovesIntermediatePNG(t *testing.T) {
 
 	cfg := Config{
 		Template: tpl,
-		Text:     map[string]string{"text1": "x"},
+		Text:     map[string]TextSlot{"text1": {Value: "x"}},
 		Tools: ToolConfig{
 			Resvg: fakeTool(t, bin, "resvg", ""),
 			CWebP: fakeTool(t, bin, "cwebp", ""),
@@ -313,5 +314,65 @@ func TestRenderSiteRemovesIntermediatePNG(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(out, "logo.png")); !os.IsNotExist(err) {
 		t.Fatal("intermediate logo.png should be removed")
+	}
+}
+
+func TestTextSlotColor(t *testing.T) {
+	tpl := filepath.Join(t.TempDir(), "t.svg")
+	// #nosec G306 -- test fixture in a private t.TempDir().
+	if err := os.WriteFile(tpl, []byte(`<svg><text>{{text1}}</text></svg>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := Config{Template: tpl, Text: map[string]TextSlot{
+		"text1": {Value: `A & <B>`, Color: "#ff0000"},
+	}}
+	got, err := renderTemplate(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `<tspan fill="#ff0000">A &amp; &lt;B&gt;</tspan>`
+	if !strings.Contains(string(got), want) {
+		t.Fatalf("missing %q in %s", want, got)
+	}
+}
+
+func TestRecolorSVG(t *testing.T) {
+	in := `<svg><rect fill="#000000"/><path fill="none"/><circle stroke="#123456"/></svg>`
+	out := string(recolorSVG([]byte(in), "#ff0000", "#00ff00"))
+	if !strings.Contains(out, `fill="#ff0000"`) || !strings.Contains(out, `fill="none"`) ||
+		!strings.Contains(out, `stroke="#00ff00"`) {
+		t.Fatalf("recolorSVG = %s", out)
+	}
+	out = string(recolorSVG([]byte(`<svg><rect/></svg>`), "#112233", ""))
+	if !strings.Contains(out, `<svg fill="#112233"`) {
+		t.Fatalf("fill injection failed: %s", out)
+	}
+}
+
+func TestImageRecolor(t *testing.T) {
+	dir := t.TempDir()
+	svg := filepath.Join(dir, "m.svg")
+	// #nosec G306 -- test fixture in a private t.TempDir().
+	if err := os.WriteFile(svg, []byte(`<svg><rect fill="#000"/></svg>`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	uri, err := imageDataURI(ImageSlot{Src: svg, Fill: "#ff0000"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(uri, "data:image/svg+xml;base64,"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `fill="#ff0000"`) {
+		t.Fatalf("data URI not recolored: %s", b)
+	}
+	png := filepath.Join(dir, "p.png")
+	// #nosec G306 -- test fixture in a private t.TempDir().
+	if err := os.WriteFile(png, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := imageDataURI(ImageSlot{Src: png, Fill: "#fff"}); err == nil {
+		t.Fatal("expected recolor error for non-svg")
 	}
 }
