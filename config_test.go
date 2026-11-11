@@ -29,7 +29,7 @@ func TestValidateConfig(t *testing.T) {
 		{"path in name", ok(func(c *Config) { c.Name = "a/b" }), "invalid or missing name"},
 		{"dot-dot name", ok(func(c *Config) { c.Name = ".." }), "invalid or missing name"},
 		{"no template", ok(func(c *Config) { c.Template = "" }), "template is required"},
-		{"bad text slot", ok(func(c *Config) { c.Text = map[string]TextSlot{"text5": {Value: "x"}} }), "invalid text field"},
+		{"bad text slot", ok(func(c *Config) { c.Text = map[string]TextSlot{"text7": {Value: "x"}} }), "invalid text field"},
 		{"named text key", ok(func(c *Config) { c.Text = map[string]TextSlot{"title": {Value: "x"}} }), "invalid text field"},
 		{"text slots 1-4 ok", ok(func(c *Config) {
 			c.Text = map[string]TextSlot{"text1": {Value: "a"}, "text2": {Value: "b"}, "text3": {Value: "c"}, "text4": {Value: "d"}}

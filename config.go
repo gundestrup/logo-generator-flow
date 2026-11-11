@@ -102,8 +102,8 @@ type ToolConfig struct {
 
 var (
 	siteName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
-	textSlot = regexp.MustCompile(`^text[1-4]$`)
-	imgSlot  = regexp.MustCompile(`^image[1-4]$`)
+	textSlot = regexp.MustCompile(`^text[1-6]$`)
+	imgSlot  = regexp.MustCompile(`^image[1-6]$`)
 )
 
 func loadConfig(path string) (Config, error) {
@@ -178,7 +178,7 @@ func validateIdentity(c Config) error {
 func validateSlots(c Config) error {
 	for key, s := range c.Text {
 		if !textSlot.MatchString(key) {
-			return fmt.Errorf("invalid text field %q: use text1-text4", key)
+			return fmt.Errorf("invalid text field %q: use text1-text6", key)
 		}
 		if err := validColor(s.Color); err != nil {
 			return fmt.Errorf("text %s color: %w", key, err)
@@ -186,7 +186,7 @@ func validateSlots(c Config) error {
 	}
 	for key, s := range c.Images {
 		if !imgSlot.MatchString(key) {
-			return fmt.Errorf("invalid image field %q: use image1-image4", key)
+			return fmt.Errorf("invalid image field %q: use image1-image6", key)
 		}
 		for name, col := range map[string]string{"fill": s.Fill, "stroke": s.Stroke} {
 			if err := validColor(col); err != nil {

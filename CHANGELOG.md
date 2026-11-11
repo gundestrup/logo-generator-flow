@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   insert `assets/images/*` into `image1-4` (with an svg fill-recolor
   option), pick `assets/fonts/*` into `render.fontFiles`/`fontFamily`,
   and set per-slot text colors.
+- Template mapping flow: `POST /api/template-analyze` lists `id`'d
+  elements with bounding boxes; `POST /api/template-fill` rewrites a
+  template into `{{slot}}` form — figure boxes become `<image>` elements
+  at the box geometry (`preserveAspectRatio="xMidYMid meet"`), text
+  elements distribute assigned slots across their tspans. Editor gains a
+  "map template…" modal; slots extended to `text1-6`/`image1-6`;
+  `templates/borg-collective.svg` + `configs/borg.json` added.
 - Slot object forms: `textN` may be `{"text": "...", "color": "#rrggbb"}`
   (renders via `<tspan fill>`), and `imageN` may be
   `{"src": "...", "fill": "#hex", "stroke": "#hex"}` — fill/stroke

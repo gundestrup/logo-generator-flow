@@ -173,6 +173,21 @@
         margin: 4px 0;
         text-align: left;
       }
+      .map-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 6px 0;
+        font-size: 12px;
+      }
+      .map-row code {
+        color: var(--accent);
+        min-width: 110px;
+      }
+      .map-row .dim {
+        color: var(--dim);
+        min-width: 130px;
+      }
       .pick img {
         width: 40px;
         height: 40px;
@@ -217,6 +232,7 @@
         </select>
       </label>
       <button type="button" id="pick-img">pick…</button>
+      <button type="button" id="map-tpl">map template…</button>
       <span id="img-color-wrap" hidden
         >svg fill <input type="color" id="img-color" value="#ffffff" />
       </span>
@@ -255,6 +271,14 @@
           <div class="files" id="files"></div>
         </div>
       </section>
+    </div>
+    <div id="map-modal" hidden>
+      <div class="dlg">
+        <h2>template regions — assign each element a slot</h2>
+        <div id="map-list"></div>
+        <button type="button" id="map-apply" class="primary">apply</button>
+        <button type="button" id="map-close">cancel</button>
+      </div>
     </div>
     <div id="modal" hidden>
       <div class="dlg">
@@ -424,6 +448,76 @@
           o.render.fontFiles = [path];
           o.render.fontFamily = family;
         });
+      };
+      $("map-tpl").onclick = async () => {
+        try {
+          const d = await j("POST", "/api/template-analyze", $("config").value);
+          $("map-list").innerHTML = "";
+          const slots = [
+            "",
+            "image1",
+            "image2",
+            "image3",
+            "image4",
+            "image5",
+            "image6",
+            "text1",
+            "text2",
+            "text3",
+            "text4",
+            "text5",
+            "text6",
+          ];
+          for (const e of d.elements) {
+            const row = document.createElement("div");
+            row.className = "map-row";
+            const dim = e.w
+              ? `${Math.round(e.w)}×${Math.round(e.h)} @ ${Math.round(e.x)},${Math.round(e.y)}`
+              : "text";
+            row.innerHTML = `<code>${e.id}</code><span class="dim">&lt;${e.tag}&gt; ${dim}</span>`;
+            const sel = document.createElement("select");
+            sel.dataset.eid = e.id;
+            sel.innerHTML = slots
+              .map((v) => `<option value="${v}">${v || "—"}</option>`)
+              .join("");
+            if (e.tag === "text") sel.value = "";
+            row.append(sel);
+            $("map-list").append(row);
+          }
+          $("map-modal").hidden = false;
+        } catch (e) {
+          status(e.message, false);
+        }
+      };
+      $("map-close").onclick = () => {
+        $("map-modal").hidden = true;
+      };
+      $("map-apply").onclick = async () => {
+        const mapping = {};
+        document.querySelectorAll("#map-list select").forEach((sel) => {
+          if (sel.value) mapping[sel.value] = sel.dataset.eid;
+        });
+        if (!Object.keys(mapping).length) {
+          status("no slots assigned", false);
+          return;
+        }
+        try {
+          const d = await j(
+            "POST",
+            "/api/template-fill",
+            JSON.stringify({
+              config: JSON.parse($("config").value),
+              mapping,
+            }),
+          );
+          patch((o) => {
+            o.template = d.template;
+          });
+          $("map-modal").hidden = true;
+          status(`wrote ${d.template}`, true);
+        } catch (e) {
+          status(e.message, false);
+        }
       };
       loadFonts();
       $("save").onclick = async () => {

@@ -244,3 +244,37 @@ func TestEditPreviewObjectSlots(t *testing.T) {
 		t.Fatalf("missing tspan: %s", res.SVG)
 	}
 }
+
+func TestAnalyzeTemplate(t *testing.T) {
+	svg := `<svg><g><path id="Box" d="M10 20 L60 20 C65 20 70 25 70 30 L70 80 L10 80 Z"/><text id="Lbl" transform="matrix(1 0 0 1 100 200)"><tspan>x</tspan></text><path d="M0 0"/></g></svg>`
+	els := analyzeTemplate(svg)
+	if len(els) != 2 {
+		t.Fatalf("elements = %+v", els)
+	}
+	if els[0].ID != "Box" || els[0].X != 10 || els[0].Y != 20 || els[0].W != 60 || els[0].H != 60 {
+		t.Fatalf("box = %+v", els[0])
+	}
+	if els[1].ID != "Lbl" || els[1].X != 100 || els[1].Y != 200 {
+		t.Fatalf("text = %+v", els[1])
+	}
+}
+
+func TestTemplateFill(t *testing.T) {
+	svg := `<svg><path id="Box" d="M10 20 L70 20 L70 80 L10 80 Z" class="c"/><text id="Lbl"><tspan class="a">one</tspan><tspan class="b">two</tspan><tspan class="c">three</tspan></text></svg>`
+	out, err := templateFill(svg, map[string]string{"image1": "Box", "text1": "Lbl", "text2": "Lbl"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `<image href="{{image1}}" x="10" y="20" width="60" height="60" preserveAspectRatio="xMidYMid meet"/>`
+	if !strings.Contains(out, want) {
+		t.Fatalf("missing image: %s", out)
+	}
+	if !strings.Contains(out, `<tspan class="a">{{text1}}</tspan>`) ||
+		!strings.Contains(out, `<tspan class="b">{{text2}}</tspan>`) ||
+		!strings.Contains(out, `<tspan class="c"></tspan>`) {
+		t.Fatalf("tspans: %s", out)
+	}
+	if _, err := templateFill(svg, map[string]string{"image1": "Nope"}); err == nil {
+		t.Fatal("expected missing-id error")
+	}
+}
