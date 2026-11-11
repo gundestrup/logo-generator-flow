@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   elements distribute assigned slots across their tspans. Editor gains a
   "map template…" modal; slots extended to `text1-6`/`image1-6`;
   `templates/borg-collective.svg` + `configs/borg.json` added.
+- Inline text markup — `**bold**`, `*italic*`, `__underline__`,
+  `[#hex]…[/]`, `[font:…]…[/]`, `[size:…]…[/]` — renders as styled
+  `<tspan>` runs; editor config pane gains a mini toolbar (B/I/U/color)
+  that wraps the textarea selection.
 - Slot object forms: `textN` may be `{"text": "...", "color": "#rrggbb"}`
   (renders via `<tspan fill>`), and `imageN` may be
   `{"src": "...", "fill": "#hex", "stroke": "#hex"}` — fill/stroke

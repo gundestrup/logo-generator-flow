@@ -116,7 +116,7 @@ func renderTemplate(c Config) ([]byte, error) {
 	}
 	vals := map[string]string{}
 	for k, v := range c.Text {
-		esc := html.EscapeString(v.Value)
+		esc := styledText(v.Value)
 		if v.Color != "" {
 			esc = `<tspan fill="` + v.Color + `">` + esc + `</tspan>`
 		}
@@ -427,4 +427,114 @@ func run(name string, args ...string) error {
 		return fmt.Errorf("%w\n%s", err, strings.TrimSpace(out.String()))
 	}
 	return nil
+}
+
+// styleTok tokenizes the text-slot mini-markup. Bracket tags are constrained
+// to safe character sets so attribute injection is impossible.
+var styleTok = regexp.MustCompile(`\\.|(\*\*|\*|__|\[(?:color:)?#[0-9A-Fa-f]{3,8}\]|\[font:[A-Za-z0-9 _+.,-]+\]|\[size:[0-9.]+(?:px|em|%)?\]|\[/\])`)
+
+// styledText converts mini-markup into styled <tspan> runs:
+// **bold**, *italic*, __underline__, [#hex]…[/] or [color:#hex]…[/],
+// [font:Name]…[/], [size:NN]…[/]. Unmatched markers pass through literally;
+// each text run is XML-escaped. \* \_ \[ \] escape to literals.
+func styledText(s string) string {
+	type sty struct{ w, i, u, fill, fam, size string }
+	var cur sty
+	var stack []sty
+	open := map[byte]bool{}
+	var b strings.Builder
+	emit := func(seg string) {
+		seg = strings.NewReplacer(`\*`, "*", `\_`, "_", `\[`, "[", `\]`, "]").Replace(seg)
+		if seg == "" {
+			return
+		}
+		if cur == (sty{}) {
+			b.WriteString(html.EscapeString(seg))
+			return
+		}
+		b.WriteString("<tspan")
+		if cur.w != "" {
+			b.WriteString(` font-weight="` + cur.w + `"`)
+		}
+		if cur.i != "" {
+			b.WriteString(` font-style="` + cur.i + `"`)
+		}
+		if cur.u != "" {
+			b.WriteString(` text-decoration="` + cur.u + `"`)
+		}
+		if cur.fill != "" {
+			b.WriteString(` fill="` + cur.fill + `"`)
+		}
+		if cur.fam != "" {
+			b.WriteString(` font-family="` + cur.fam + `"`)
+		}
+		if cur.size != "" {
+			b.WriteString(` font-size="` + cur.size + `"`)
+		}
+		b.WriteString(">" + html.EscapeString(seg) + "</tspan>")
+	}
+	push := func(mut func()) {
+		stack = append(stack, cur)
+		mut()
+	}
+	pop := func() {
+		if len(stack) > 0 {
+			cur = stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+		}
+	}
+	idx := 0
+	for _, m := range styleTok.FindAllStringSubmatchIndex(s, -1) {
+		emit(s[idx:m[0]])
+		if m[2] < 0 { // escaped char, written literally via emit of the pair
+			emit(s[m[0]:m[1]])
+			idx = m[1]
+			continue
+		}
+		tok := s[m[2]:m[3]]
+		switch tok {
+		case "**":
+			if open['b'] {
+				pop()
+				delete(open, 'b')
+			} else {
+				open['b'] = true
+				push(func() { cur.w = "bold" })
+			}
+		case "*":
+			if open['i'] {
+				pop()
+				delete(open, 'i')
+			} else {
+				open['i'] = true
+				push(func() { cur.i = "italic" })
+			}
+		case "__":
+			if open['u'] {
+				pop()
+				delete(open, 'u')
+			} else {
+				open['u'] = true
+				push(func() { cur.u = "underline" })
+			}
+		case "[/]":
+			for k := range open {
+				delete(open, k)
+			}
+			pop()
+		default:
+			switch {
+			case strings.HasPrefix(tok, "[font:"):
+				push(func() { cur.fam = strings.TrimSuffix(strings.TrimPrefix(tok, "[font:"), "]") })
+			case strings.HasPrefix(tok, "[size:"):
+				push(func() { cur.size = strings.TrimSuffix(strings.TrimPrefix(tok, "[size:"), "]") })
+			default: // [#hex] or [color:#hex]
+				c := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(tok, "[color:"), "["), "]")
+				push(func() { cur.fill = c })
+			}
+		}
+		idx = m[1]
+	}
+	emit(s[idx:])
+	return b.String()
 }

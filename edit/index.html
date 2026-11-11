@@ -228,6 +228,21 @@
         border-radius: 3px;
         white-space: nowrap;
       }
+      .mk-tools {
+        float: right;
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .mk-tools button {
+        padding: 1px 8px;
+        font-size: 12px;
+      }
+      .mk-tools input[type="color"] {
+        width: 26px;
+        height: 20px;
+        vertical-align: middle;
+      }
       .pick img {
         width: 40px;
         height: 40px;
@@ -548,6 +563,19 @@
         $("img-color-wrap").hidden = !isSvgSrc(src);
       };
       $("img-slot").onchange = syncImgColors;
+
+      const wrapSel = (pre, post) => {
+        const t = $("config");
+        const a = t.selectionStart;
+        const b2 = t.selectionEnd;
+        t.setRangeText(pre + t.value.slice(a, b2) + post, a, b2, "select");
+        preview();
+      };
+      document.querySelectorAll("[data-mk]").forEach((btn) => {
+        const marks = { b: ["**", "**"], i: ["*", "*"], u: ["__", "__"] };
+        btn.onclick = () => wrapSel(...marks[btn.dataset.mk]);
+      });
+      $("mk-color").oninput = () => wrapSel(`[${$("mk-color").value}]`, "[/]");
 
       $("txt-color").oninput = () => {
         const slot = $("txt-slot").value;

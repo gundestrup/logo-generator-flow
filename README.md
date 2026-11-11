@@ -115,6 +115,10 @@ Rules:
 
 - `text.<textN>` may also be `{"text": "...", "color": "#rrggbb"}` —
   rendered wrapped in `<tspan fill>` so it overrides the template fill
+- inline markup inside text values produces styled `<tspan>` runs:
+  `**bold**`, `*italic*`, `__underline__`, `[#ff0000]…[/]` or
+  `[color:#hex]…[/]`, `[font:Family]…[/]`, `[size:NN]…[/]`; escape
+  literals with `\*` `\_` `\[`; every run is XML-escaped
 - `images.<imageN>` may also be `{"src": "...", "fill": "#hex",
 "stroke": "#hex"}` — recolors `.svg` sources (fill/stroke attrs are
   rewritten, `fill="none"` preserved, fill injected when absent);

@@ -376,3 +376,25 @@ func TestImageRecolor(t *testing.T) {
 		t.Fatal("expected recolor error for non-svg")
 	}
 }
+
+func TestStyledText(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`plain`, `plain`},
+		{`a <b>`, `a &lt;b&gt;`},
+		{`hi **bold** end`, `hi <tspan font-weight="bold">bold</tspan> end`},
+		{`*it*`, `<tspan font-style="italic">it</tspan>`},
+		{`__u__`, `<tspan text-decoration="underline">u</tspan>`},
+		{`[#f00]red[/]`, `<tspan fill="#f00">red</tspan>`},
+		{`[color:#00ff00]g[/]`, `<tspan fill="#00ff00">g</tspan>`},
+		{`[font:Menlo]m[/]`, `<tspan font-family="Menlo">m</tspan>`},
+		{`[size:40px]big[/]`, `<tspan font-size="40px">big</tspan>`},
+		{`**b *i***`, `<tspan font-weight="bold">b </tspan><tspan font-weight="bold" font-style="italic">i</tspan>`},
+		{`\*lit\*`, `*lit*`},
+		{`[font:<script>]x[/]`, `[font:&lt;script&gt;]x`},
+	}
+	for _, c := range cases {
+		if got := styledText(c.in); got != c.want {
+			t.Errorf("styledText(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
