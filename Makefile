@@ -7,7 +7,7 @@ BIN := logo-generator
 	install-hooks quality ready clean
 
 build:
-	go build -trimpath -ldflags="$(LDFLAGS)" -o $(BIN) .
+	go build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o $(BIN) .
 
 run: build
 	./$(BIN)
