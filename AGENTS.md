@@ -102,3 +102,6 @@ Relevant notes:
 - `patterns/version-consistency.md`
 - `patterns/npm-supply-chain-hardening.md`
 - `repos/Knowledge-BA46-Flow.md`
+- `scripts/check-dom-refs.mjs` (in `npm run check`) fails when a literal
+  `$("id")`/`getElementById("id")` lookup has no matching `id="…"` in the
+  same HTML file — DOM ids referenced by JS must exist in markup.

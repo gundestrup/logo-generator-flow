@@ -13,7 +13,8 @@
     "lint:frontend": "biome lint demo/*.html edit/*.html docs/assets/*.html scripts/*.mjs",
     "format:check": "prettier --check package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"edit/*.html\" \"docs/assets/*.html\"",
     "format": "prettier --write package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"edit/*.html\" \"docs/assets/*.html\"",
-    "check": "npm run lint:frontend && npm run format:check"
+    "check": "npm run lint:frontend && npm run lint:dom && npm run format:check",
+    "lint:dom": "node scripts/check-dom-refs.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
