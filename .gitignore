@@ -31,3 +31,10 @@ Thumbs.db
 
 # Tooling caches
 .semgrep-cache/
+
+# Local user assets — never commit custom fonts/configs/templates
+assets/fonts/*
+!assets/fonts/.gitkeep
+configs/borg*.json
+templates/Borg-Collective*.svg
+templates/borg-collective.svg
