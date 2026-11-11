@@ -14,7 +14,7 @@
 
 [ci-badge]: https://github.com/gundestrup/logo-generator-flow/actions/workflows/ci.yml/badge.svg
 [ci-workflow]: https://github.com/gundestrup/logo-generator-flow/actions/workflows/ci.yml
-[version-badge]: https://img.shields.io/badge/version-0.1.0-blue.svg
+[version-badge]: https://img.shields.io/badge/version-0.1.1-blue.svg
 [changelog]: CHANGELOG.md
 
 CLI that renders per-site SVG logos from a shared `{{placeholder}}` template and

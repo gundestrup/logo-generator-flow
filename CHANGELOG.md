@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-11
+
+### Fixed
+
+- `go build` in CI job containers: `-buildvcs=false` (dubious-ownership VCS
+  stamping failure).
+- CodeFactor findings: split `renderSite`/`validateConfig` into helpers,
+  merged duplicate `section` CSS selector in demo.html.
+- SonarLint findings: `runAll` cognitive complexity, deduplicated `wrote`
+  progress lines.
+
+### Changed
+
+- sonarqube-scan-action pinned to v8.4.1; Semgrep CI uses the registry
+  `p/golang` + `p/security-audit` packs (Pro rules included, no token).
+- sonar-project.properties configured for SonarCloud
+  (org `gundestrup`, coverage import).
+
 ## [0.1.0] - 2026-11-10
 
 ### Added
