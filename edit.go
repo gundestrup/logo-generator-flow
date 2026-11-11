@@ -245,6 +245,7 @@ var (
 	tplNumRe  = regexp.MustCompile(`-?\d+\.?\d*`)
 	tplAttrRe = regexp.MustCompile(`\b(x|y|width|height)="(-?\d+\.?\d*)"`)
 	tplXYRe   = regexp.MustCompile(`matrix\(1 0 0 1 (-?\d+\.?\d*) (-?\d+\.?\d*)\)`)
+	tplVBRe   = regexp.MustCompile(`viewBox="(-?[\d.]+)[ ,]+(-?[\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)"`)
 )
 
 // analyzeTemplate finds id'd elements and their bounding boxes. For <path>
@@ -317,8 +318,8 @@ func templateFill(svg string, mapping map[string]string) (string, error) {
 			for _, e := range analyzeTemplate(svg[loc[0]:loc[1]]) {
 				box = e
 			}
-			img := fmt.Sprintf(`<image href="{{%s}}" x="%v" y="%v" width="%v" height="%v" preserveAspectRatio="xMidYMid meet"/>`,
-				slots[0], box.X, box.Y, box.W, box.H)
+			img := fmt.Sprintf(`<image id="%s" href="{{%s}}" x="%v" y="%v" width="%v" height="%v" preserveAspectRatio="xMidYMid meet"/>`,
+				id, slots[0], box.X, box.Y, box.W, box.H)
 			svg = svg[:loc[0]] + img + svg[loc[1]:]
 			continue
 		}
@@ -366,7 +367,14 @@ func (h *editHandler) tplAnalyze(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"elements": analyzeTemplate(string(b))})
+	vb := []string{}
+	if m := tplVBRe.FindStringSubmatch(string(b)); m != nil {
+		vb = m[1:]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"elements": analyzeTemplate(string(b)),
+		"viewBox":  vb,
+	})
 }
 
 type tplFillReq struct {

@@ -265,7 +265,7 @@ func TestTemplateFill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `<image href="{{image1}}" x="10" y="20" width="60" height="60" preserveAspectRatio="xMidYMid meet"/>`
+	want := `<image id="Box" href="{{image1}}" x="10" y="20" width="60" height="60" preserveAspectRatio="xMidYMid meet"/>`
 	if !strings.Contains(out, want) {
 		t.Fatalf("missing image: %s", out)
 	}

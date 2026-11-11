@@ -188,6 +188,46 @@
         color: var(--dim);
         min-width: 130px;
       }
+      #tpl-stage {
+        position: relative;
+        width: 100%;
+      }
+      #tpl-stage svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      #tpl-overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+      .region {
+        position: absolute;
+        border: 2px dashed var(--dim);
+        border-radius: 4px;
+      }
+      .region.on {
+        border-color: var(--accent);
+      }
+      .region.txt {
+        border-style: dotted;
+      }
+      .region.txt.on {
+        border-color: #34d399;
+      }
+      .region b {
+        position: absolute;
+        top: 2px;
+        left: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #fff;
+        background: rgba(4, 12, 24, 0.75);
+        padding: 0 4px;
+        border-radius: 3px;
+        white-space: nowrap;
+      }
       .pick img {
         width: 40px;
         height: 40px;
@@ -235,6 +275,9 @@
       </label>
       <button type="button" id="pick-img">pick…</button>
       <button type="button" id="map-tpl">map template…</button>
+      <label
+        ><input type="checkbox" id="show-regions" checked /> outlines</label
+      >
       <span id="img-color-wrap" hidden
         >svg fill <input type="color" id="img-color" value="#ffffff" />
       </span>
@@ -266,7 +309,14 @@
       </section>
       <section class="card">
         <h2>template</h2>
-        <div class="body"><div class="preview" id="tpl"></div></div>
+        <div class="body">
+          <div class="preview">
+            <div id="tpl-stage">
+              <div id="tpl"></div>
+              <div id="tpl-overlay" hidden></div>
+            </div>
+          </div>
+        </div>
       </section>
       <section class="card">
         <h2>generated</h2>
@@ -334,6 +384,37 @@
           status(e.message, false);
         }
       }
+
+      let regions = null,
+        tplBox = null;
+      const slotMap = {};
+
+      function drawRegions() {
+        const ov = $("tpl-overlay");
+        ov.innerHTML = "";
+        if (!regions || !tplBox || tplBox.length !== 4) {
+          ov.hidden = true;
+          return;
+        }
+        const [minX, minY, vbW, vbH] = tplBox.map(Number);
+        $("tpl-stage").style.aspectRatio = `${vbW} / ${vbH}`;
+        for (const e of regions) {
+          const d = document.createElement("div");
+          const slot = slotMap[e.id];
+          d.className = `region${e.tag === "text" ? " txt" : ""}${slot ? " on" : ""}`;
+          const x = ((e.x - minX) / vbW) * 100;
+          const y = ((e.y - minY) / vbH) * 100;
+          const w = Math.max((e.w / vbW) * 100, 1.2);
+          const h = Math.max((e.h / vbH) * 100, 1.2);
+          d.style.cssText = `left:${x}%;top:${y}%;width:${w}%;height:${h}%`;
+          const b = document.createElement("b");
+          b.textContent = slot || e.id;
+          d.append(b);
+          ov.append(d);
+        }
+        ov.hidden = !$("show-regions").checked;
+      }
+      $("show-regions").onchange = drawRegions;
 
       let timer;
       function preview() {
@@ -456,6 +537,9 @@
       $("map-tpl").onclick = async () => {
         try {
           const d = await j("POST", "/api/template-analyze", $("config").value);
+          regions = d.elements;
+          tplBox = d.viewBox;
+          drawRegions();
           $("map-list").innerHTML = "";
           const slots = [
             "",
