@@ -433,6 +433,17 @@ func run(name string, args ...string) error {
 // to safe character sets so attribute injection is impossible.
 var styleTok = regexp.MustCompile(`\\.|(\*\*|\*|__|\[(?:color:)?#[0-9A-Fa-f]{3,8}\]|\[font:[A-Za-z0-9 _+.,-]+\]|\[size:[0-9.]+(?:px|em|%)?\]|\[/\])`)
 
+// xmlSafe drops runes that are invalid in XML 1.0 so config text can't
+// corrupt the generated SVG document.
+func xmlSafe(s string) string {
+	return strings.Map(func(r rune) rune {
+		if (r < 0x20 && r != '\t' && r != '\n' && r != '\r') || r == 0xFFFE || r == 0xFFFF {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // styledText converts mini-markup into styled <tspan> runs:
 // **bold**, *italic*, __underline__, [#hex]…[/] or [color:#hex]…[/],
 // [font:Name]…[/], [size:NN]…[/]. Unmatched markers pass through literally;
@@ -445,6 +456,7 @@ func styledText(s string) string {
 	var b strings.Builder
 	emit := func(seg string) {
 		seg = strings.NewReplacer(`\*`, "*", `\_`, "_", `\[`, "[", `\]`, "]").Replace(seg)
+		seg = xmlSafe(seg)
 		if seg == "" {
 			return
 		}

@@ -36,6 +36,10 @@ make install-hooks   # point core.hooksPath at hooks/ (run once per clone)
 
 Tests must use temp dirs and fake tool stubs — never require resvg/cwebp/
 avifenc or network access. `go test -race ./...` is the gate.
+`integration_test.go` (`//go:build integration`) exercises the real
+resvg/cwebp/avifenc binaries — run `go test -tags=integration ./...`
+when the tools are installed. `fuzz_test.go` fuzzes styledText,
+parseColor, slot unmarshalers and recolorSVG.
 
 ## Quality gates
 
