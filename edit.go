@@ -232,16 +232,18 @@ func (h *editHandler) outputFile(w http.ResponseWriter, r *http.Request) {
 
 // tplElement is one id'd SVG element that can act as a replacement region.
 type tplElement struct {
-	ID  string  `json:"id"`
-	Tag string  `json:"tag"`
-	X   float64 `json:"x"`
-	Y   float64 `json:"y"`
-	W   float64 `json:"w"`
-	H   float64 `json:"h"`
+	ID   string  `json:"id"`
+	Tag  string  `json:"tag"`
+	Slot string  `json:"slot,omitempty"`
+	X    float64 `json:"x"`
+	Y    float64 `json:"y"`
+	W    float64 `json:"w"`
+	H    float64 `json:"h"`
 }
 
 var (
-	tplElemRe = regexp.MustCompile(`<(path|rect|image|text|circle|ellipse)\b[^>]*\bid="([^"]+)"[^>]*>`)
+	tplElemRe = regexp.MustCompile(`<(path|rect|image|circle|ellipse)\b[^>]*\bid="([^"]+)"[^>]*>|<text\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</text>`)
+	tplDRe    = regexp.MustCompile(`\bd="([^"]*)"`)
 	tplNumRe  = regexp.MustCompile(`-?\d+\.?\d*`)
 	tplAttrRe = regexp.MustCompile(`\b(x|y|width|height)="(-?\d+\.?\d*)"`)
 	tplXYRe   = regexp.MustCompile(`matrix\(1 0 0 1 (-?\d+\.?\d*) (-?\d+\.?\d*)\)`)
@@ -254,10 +256,19 @@ var (
 func analyzeTemplate(svg string) []tplElement {
 	els := []tplElement{}
 	for _, m := range tplElemRe.FindAllStringSubmatch(svg, -1) {
-		e := tplElement{Tag: m[1], ID: m[2]}
+		e := tplElement{Tag: "text", ID: m[3]}
+		if m[1] != "" {
+			e.Tag, e.ID = m[1], m[2]
+		}
+		if p := placeholder.FindStringSubmatch(m[0]); p != nil {
+			e.Slot = p[1]
+		}
 		switch e.Tag {
 		case "path":
-			nums := tplNumRe.FindAllString(m[0], -1)
+			var nums []string
+			if dm := tplDRe.FindStringSubmatch(m[0]); dm != nil {
+				nums = tplNumRe.FindAllString(dm[1], -1)
+			}
 			for i := 0; i+1 < len(nums); i += 2 {
 				x, y := atof(nums[i]), atof(nums[i+1])
 				if e.W == 0 && e.H == 0 && i == 0 {

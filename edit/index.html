@@ -385,6 +385,16 @@
           $("files").innerHTML = "";
           syncImgColors();
           preview();
+          try {
+            const a = await j("POST", "/api/template-analyze", d.config);
+            regions = a.elements;
+            tplBox = a.viewBox;
+            for (const e of a.elements) if (e.slot) slotMap[e.id] = e.slot;
+            drawRegions();
+          } catch {
+            regions = null;
+            drawRegions();
+          }
         } catch (e) {
           status(e.message, false);
         }
@@ -574,6 +584,7 @@
           const d = await j("POST", "/api/template-analyze", $("config").value);
           regions = d.elements;
           tplBox = d.viewBox;
+          for (const e of d.elements) if (e.slot) slotMap[e.id] = e.slot;
           drawRegions();
           $("map-list").innerHTML = "";
           const figs = d.elements.filter((e) => e.tag !== "text");
