@@ -576,8 +576,46 @@
           tplBox = d.viewBox;
           drawRegions();
           $("map-list").innerHTML = "";
-          const slots = [
-            "",
+          const figs = d.elements.filter((e) => e.tag !== "text");
+          const texts = d.elements.filter((e) => e.tag === "text");
+          const syncSelects = () => {
+            document.querySelectorAll("#map-list select").forEach((sel) => {
+              const cur = Object.entries(slotMap).find(
+                ([, sl]) => sl === sel.dataset.slot,
+              );
+              sel.value = cur ? cur[0] : "";
+            });
+          };
+          const mkRow = (slot, els) => {
+            const row = document.createElement("div");
+            row.className = "map-row";
+            const label = document.createElement("code");
+            label.textContent = slot;
+            row.append(label, "→");
+            const sel = document.createElement("select");
+            sel.dataset.slot = slot;
+            sel.innerHTML =
+              `<option value="">—</option>` +
+              els
+                .map((e) => {
+                  const dim = e.w
+                    ? ` (${Math.round(e.w)}×${Math.round(e.h)})`
+                    : "";
+                  return `<option value="${e.id}">${e.id}${dim}</option>`;
+                })
+                .join("");
+            sel.onchange = () => {
+              for (const id of Object.keys(slotMap)) {
+                if (slotMap[id] === slot) delete slotMap[id];
+              }
+              if (sel.value) slotMap[sel.value] = slot;
+              syncSelects();
+              drawRegions();
+            };
+            row.append(sel);
+            return row;
+          };
+          for (const slot of [
             "image1",
             "image2",
             "image3",
@@ -590,23 +628,12 @@
             "text4",
             "text5",
             "text6",
-          ];
-          for (const e of d.elements) {
-            const row = document.createElement("div");
-            row.className = "map-row";
-            const dim = e.w
-              ? `${Math.round(e.w)}×${Math.round(e.h)} @ ${Math.round(e.x)},${Math.round(e.y)}`
-              : "text";
-            row.innerHTML = `<code>${e.id}</code><span class="dim">&lt;${e.tag}&gt; ${dim}</span>`;
-            const sel = document.createElement("select");
-            sel.dataset.eid = e.id;
-            sel.innerHTML = slots
-              .map((v) => `<option value="${v}">${v || "—"}</option>`)
-              .join("");
-            if (e.tag === "text") sel.value = "";
-            row.append(sel);
-            $("map-list").append(row);
+          ]) {
+            $("map-list").append(
+              mkRow(slot, slot.startsWith("text") ? texts : figs),
+            );
           }
+          syncSelects();
           $("map-modal").hidden = false;
         } catch (e) {
           status(e.message, false);
@@ -618,7 +645,7 @@
       $("map-apply").onclick = async () => {
         const mapping = {};
         document.querySelectorAll("#map-list select").forEach((sel) => {
-          if (sel.value) mapping[sel.value] = sel.dataset.eid;
+          if (sel.value) mapping[sel.dataset.slot] = sel.value;
         });
         if (!Object.keys(mapping).length) {
           status("no slots assigned", false);
