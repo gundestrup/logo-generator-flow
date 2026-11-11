@@ -40,55 +40,70 @@ func runAll(configsPath, outDir, sitesFlag string) error {
 		return err
 	}
 
-	var filter map[string]bool
-	if sitesFlag != "" {
-		filter = map[string]bool{}
-		for _, s := range strings.Split(sitesFlag, ",") {
-			if s = strings.TrimSpace(s); s != "" {
-				filter[s] = true
-			}
-		}
-	}
-
-	var failures []string
-	seen := map[string]string{}
-	rendered := 0
-	matched := 0
-
+	filter := siteFilter(sitesFlag)
+	res := runResult{seen: map[string]string{}}
 	for _, f := range files {
-		cfg, err := loadConfig(f)
-		if err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", f, err))
-			continue
-		}
-		if prev, dup := seen[cfg.Name]; dup {
-			failures = append(failures, fmt.Sprintf("%s: duplicate site name %q (also in %s)", f, cfg.Name, prev))
-			continue
-		}
-		seen[cfg.Name] = f
-		if filter != nil && !filter[cfg.Name] {
-			continue
-		}
-		matched++
-
-		siteDir := filepath.Join(outDir, cfg.Name)
-		fmt.Printf("== %s (%s)\n", cfg.Name, f)
-		if err := renderSite(cfg, siteDir); err != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", f, err))
-			continue
-		}
-		rendered++
+		res.render(f, outDir, filter)
 	}
+	return res.finish(sitesFlag, filter, outDir)
+}
 
-	if filter != nil && matched == 0 && len(failures) == 0 {
+// runResult accumulates per-site outcomes across a multi-config run.
+type runResult struct {
+	failures []string
+	seen     map[string]string
+	rendered int
+	matched  int
+}
+
+func siteFilter(sitesFlag string) map[string]bool {
+	if sitesFlag == "" {
+		return nil
+	}
+	filter := map[string]bool{}
+	for _, s := range strings.Split(sitesFlag, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			filter[s] = true
+		}
+	}
+	return filter
+}
+
+func (r *runResult) render(file, outDir string, filter map[string]bool) {
+	cfg, err := loadConfig(file)
+	if err != nil {
+		r.failures = append(r.failures, fmt.Sprintf("%s: %v", file, err))
+		return
+	}
+	if prev, dup := r.seen[cfg.Name]; dup {
+		r.failures = append(r.failures, fmt.Sprintf("%s: duplicate site name %q (also in %s)", file, cfg.Name, prev))
+		return
+	}
+	r.seen[cfg.Name] = file
+	if filter != nil && !filter[cfg.Name] {
+		return
+	}
+	r.matched++
+
+	siteDir := filepath.Join(outDir, cfg.Name)
+	fmt.Printf("== %s (%s)\n", cfg.Name, file)
+	if err := renderSite(cfg, siteDir); err != nil {
+		r.failures = append(r.failures, fmt.Sprintf("%s: %v", file, err))
+		return
+	}
+	r.rendered++
+}
+
+func (r *runResult) finish(sitesFlag string, filter map[string]bool, outDir string) error {
+	if filter != nil && r.matched == 0 && len(r.failures) == 0 {
 		return fmt.Errorf("no sites matched -sites %q", sitesFlag)
 	}
-	if len(failures) > 0 {
-		return fmt.Errorf("%d site(s) failed:\n - %s", len(failures), strings.Join(failures, "\n - "))
+	if len(r.failures) > 0 {
+		return fmt.Errorf("%d site(s) failed:\n - %s", len(r.failures), strings.Join(r.failures, "\n - "))
 	}
-	if rendered == 0 {
+	if r.rendered == 0 {
 		return errors.New("nothing to render")
 	}
-	fmt.Printf("done: %d site(s) -> %s/<name>/logo.*\n", rendered, outDir)
+	fmt.Printf("done: %d site(s) -> %s/<name>/logo.*\n", r.rendered, outDir)
 	return nil
 }

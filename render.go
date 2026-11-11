@@ -28,6 +28,10 @@ var (
 	hexColor    = regexp.MustCompile(`^#?([0-9a-fA-F]{6})$`)
 )
 
+func wrote(path string) {
+	fmt.Println("  wrote", path)
+}
+
 // renderSite renders one config into outDir as logo.<format>.
 func renderSite(cfg Config, outDir string) error {
 	svg, err := renderTemplate(cfg)
@@ -46,7 +50,7 @@ func renderSite(cfg Config, outDir string) error {
 	if err := os.WriteFile(svgPath, svg, 0o644); err != nil {
 		return fmt.Errorf("write SVG: %w", err)
 	}
-	fmt.Println("  wrote", svgPath)
+	wrote(svgPath)
 
 	wanted := formatsSet(cfg.Output.Formats)
 	if !wanted["png"] && !wanted["jpg"] && !wanted["webp"] && !wanted["avif"] {
@@ -75,7 +79,7 @@ func renderRasters(cfg Config, wanted map[string]bool, stem, svgPath string) err
 	if err := svgToPNG(cfg, tools.resvg, svgPath, pngPath); err != nil {
 		return err
 	}
-	fmt.Println("  wrote", pngPath)
+	wrote(pngPath)
 
 	converts := []struct {
 		format string
@@ -92,7 +96,7 @@ func renderRasters(cfg Config, wanted map[string]bool, stem, svgPath string) err
 		if err := c.fn(); err != nil {
 			return err
 		}
-		fmt.Println("  wrote", stem+"."+c.format)
+		wrote(stem + "." + c.format)
 	}
 	if !wanted["png"] {
 		if err := os.Remove(pngPath); err != nil && !errors.Is(err, os.ErrNotExist) {
