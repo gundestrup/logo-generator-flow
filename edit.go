@@ -89,7 +89,7 @@ func (h *editHandler) ping(w http.ResponseWriter, _ *http.Request) {
 // Returns false if whatever holds the port isn't this program.
 func stopStaleEditor(addr string) bool {
 	cli := &http.Client{Timeout: 500 * time.Millisecond}
-	res, err := cli.Get("http://" + addr + "/api/ping")
+	res, err := cli.Get("http://" + addr + "/api/ping") // NOSONAR -- loopback-only dev tool, addr is always 127.0.0.1
 	if err != nil {
 		return false
 	}
@@ -102,7 +102,7 @@ func stopStaleEditor(addr string) bool {
 	if json.NewDecoder(res.Body).Decode(&p) != nil || p.App != "logo-generator" {
 		return false
 	}
-	resp, err := cli.Post("http://"+addr+"/api/shutdown", "", nil)
+	resp, err := cli.Post("http://"+addr+"/api/shutdown", "", nil) // NOSONAR -- loopback-only dev tool, addr is always 127.0.0.1
 	if err != nil {
 		return false
 	}
