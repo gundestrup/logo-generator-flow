@@ -55,7 +55,7 @@ jobs:
           fail_ci_if_error: false
       - name: SonarQube/SonarCloud scan
         if: env.SONAR_TOKEN != ''
-        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8.4.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
@@ -83,13 +83,11 @@ jobs:
       image: semgrep/semgrep:1.181.0@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
-      # Public repo → Semgrep App (Pro rules, policies managed app-side).
-      # Needs SEMGREP_APP_TOKEN; local mirror stays `make semgrep`
-      # (registry p/golang + p/security-audit).
+      # Registry rulesets need network to semgrep.dev; no token required
+      # (the p/* packs already include the Pro rules). .semgrepignore keeps
+      # generated assets out. --error makes any finding fail the job.
       - name: Semgrep SAST
-        env:
-          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
-        run: semgrep ci
+        run: semgrep scan --config p/golang --config p/security-audit --metrics=off --error
 
   frontend:
     runs-on: ubuntu-latest
