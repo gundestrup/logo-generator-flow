@@ -294,8 +294,12 @@
         ><input type="checkbox" id="show-regions" checked /> outlines</label
       >
       <span id="img-color-wrap" hidden
-        >svg fill <input type="color" id="img-color" value="#ffffff" /> stroke
-        <input type="color" id="img-stroke" value="#000000" />
+        ><label
+          >svg fill <input type="color" id="img-color" value="#ffffff"
+        /></label>
+        <label
+          >stroke <input type="color" id="img-stroke" value="#000000"
+        /></label>
         <button type="button" id="img-color-clear" title="remove recolor">
           ×
         </button>
@@ -332,11 +336,16 @@
               id="mk-color"
               value="#e45842"
               title="wrap selection in [#hex]…[/]"
+              aria-label="inline text color"
             />
           </span>
         </h2>
         <div class="body">
-          <textarea id="config" spellcheck="false"></textarea>
+          <textarea
+            id="config"
+            spellcheck="false"
+            aria-label="site config JSON"
+          ></textarea>
         </div>
       </section>
       <section class="card">
