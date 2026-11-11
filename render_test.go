@@ -398,3 +398,25 @@ func TestStyledText(t *testing.T) {
 		}
 	}
 }
+
+func TestRecolorDataURI(t *testing.T) {
+	svg := `<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#123456"/></svg>`
+	uri := "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(svg))
+	out, err := recolorDataURI(uri, ImageSlot{Src: uri, Fill: "#ff0000"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(out, "data:image/svg+xml;base64,"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `fill="#ff0000"`) {
+		t.Fatalf("recolor not applied: %s", b)
+	}
+	if _, err := recolorDataURI("data:image/png;base64,AAAA", ImageSlot{Fill: "#f00"}); err == nil {
+		t.Fatal("non-svg data URI must be rejected")
+	}
+	if _, err := recolorDataURI("data:image/svg+xml;base64,!!!notb64", ImageSlot{Fill: "#f00"}); err == nil {
+		t.Fatal("bad base64 must error")
+	}
+}

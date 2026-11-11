@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const editTestTemplate = `<svg xmlns="http://www.w3.org/2000/svg"><text>{{text1}}</text></svg>`
@@ -44,31 +45,12 @@ func newEditTestHandler(t *testing.T) *editHandler {
 	return &editHandler{configsPath: configs, outDir: filepath.Join(root, "output")}
 }
 
+// doEdit drives requests through the real registered mux so route drift
+// between production and tests can't go unnoticed.
 func doEdit(h *editHandler, method, target, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	w := httptest.NewRecorder()
-	switch {
-	case target == "/api/sites":
-		h.sites(w, req)
-	case strings.HasPrefix(target, "/api/site"):
-		h.site(w, req)
-	case target == "/api/preview":
-		h.preview(w, req)
-	case target == "/api/render":
-		h.renderAll(w, req)
-	case strings.HasPrefix(target, "/api/save"):
-		h.save(w, req)
-	case strings.HasPrefix(target, "/asset/"):
-		h.assetFile(w, req)
-	case strings.HasPrefix(target, "/api/images"):
-		h.assetList("assets/images", "images")(w, req)
-	case strings.HasPrefix(target, "/api/fonts"):
-		h.assetList("assets/fonts", "fonts")(w, req)
-	case strings.HasPrefix(target, "/out/"):
-		h.outputFile(w, req)
-	case target == "/api/ping":
-		h.ping(w, req)
-	}
+	editMux(h, func() {}).ServeHTTP(w, req)
 	return w
 }
 
@@ -338,5 +320,116 @@ func TestStopStaleEditorForeign(t *testing.T) {
 	_ = ln.Close()
 	if stopStaleEditor(addr) {
 		t.Fatal("dead port must not report success")
+	}
+}
+
+func TestEditIndex(t *testing.T) {
+	h := &editHandler{configsPath: t.TempDir(), outDir: t.TempDir()}
+	w := doEdit(h, "GET", "/", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "<html") {
+		t.Fatalf("index status %d", w.Code)
+	}
+}
+
+func TestTplAnalyze(t *testing.T) {
+	dir := t.TempDir()
+	tpl := filepath.Join(dir, "t.svg")
+	svg := `<svg viewBox="0 0 10 20"><rect id="Box" x="1" y="2" width="3" height="4"/><text id="T">{{text1}}</text></svg>`
+	if err := os.WriteFile(tpl, []byte(svg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := &editHandler{configsPath: dir, outDir: dir}
+	body, _ := json.Marshal(map[string]string{"template": tpl})
+	w := doEdit(h, "POST", "/api/template-analyze", string(body))
+	if w.Code != 200 {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	var res struct {
+		Elements []tplElement `json:"elements"`
+		ViewBox  []string     `json:"viewBox"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Elements) != 2 || res.Elements[0].ID != "Box" {
+		t.Fatalf("unexpected elements: %+v", res.Elements)
+	}
+	if len(res.ViewBox) != 4 || res.ViewBox[3] != "20" {
+		t.Fatalf("viewBox %+v", res.ViewBox)
+	}
+	// Missing template path → 400.
+	w = doEdit(h, "POST", "/api/template-analyze", `{"template":""}`)
+	if w.Code != 400 {
+		t.Fatalf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestTplFill(t *testing.T) {
+	dir := t.TempDir()
+	tpl := filepath.Join(dir, "t.svg")
+	svg := `<svg><rect id="Box" x="0" y="0" width="10" height="10"/></svg>`
+	if err := os.WriteFile(tpl, []byte(svg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := &editHandler{configsPath: dir, outDir: dir}
+	cfg := `{"name":"s","template":"` + tpl + `","output":{"formats":["svg"]}}`
+	body, _ := json.Marshal(tplFillReq{
+		Config:  json.RawMessage(cfg),
+		Mapping: map[string]string{"image1": "Box"},
+	})
+	w := doEdit(h, "POST", "/api/template-fill", string(body))
+	if w.Code != 200 {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	filled, err := os.ReadFile(filepath.Join(dir, "t-filled.svg")) // #nosec G304 -- fixed name inside t.TempDir
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(filled), `{{image1}}`) {
+		t.Fatalf("filled template missing slot: %s", filled)
+	}
+	// Invalid slot name → 400.
+	body, _ = json.Marshal(tplFillReq{Config: json.RawMessage(cfg), Mapping: map[string]string{"image9": "Box"}})
+	if w = doEdit(h, "POST", "/api/template-fill", string(body)); w.Code != 400 {
+		t.Fatalf("invalid slot: expected 400, got %d", w.Code)
+	}
+	// Out path escaping templates/ → 400.
+	body, _ = json.Marshal(tplFillReq{Config: json.RawMessage(cfg), Mapping: map[string]string{"image1": "Box"}, Out: "../x.svg"})
+	if w = doEdit(h, "POST", "/api/template-fill", string(body)); w.Code != 400 {
+		t.Fatalf("bad out: expected 400, got %d", w.Code)
+	}
+}
+
+func TestTemplateFillValidate(t *testing.T) {
+	if err := templateFillValidate(map[string]string{"image1": "a", "text6": "b"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"image7", "text0", "foo", "Image1"} {
+		if templateFillValidate(map[string]string{bad: "x"}) == nil {
+			t.Fatalf("slot %q should be rejected", bad)
+		}
+	}
+}
+
+func TestListenWhenFree(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	got, err := listenWhenFree(addr, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = got.Close()
+	// Held port → times out.
+	held, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = held.Close() }()
+	if _, err := listenWhenFree(held.Addr().String(), 200*time.Millisecond); err == nil {
+		t.Fatal("expected timeout error for held port")
 	}
 }

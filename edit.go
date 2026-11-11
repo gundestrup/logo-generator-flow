@@ -25,8 +25,9 @@ var editIndex []byte
 // serveEdit starts the loopback-only browser editor: pick a site, edit its
 // JSON config, see the rendered SVG update live, and run the full raster
 // pipeline into output/<name>/ on demand.
-func serveEdit(configsPath, outDir string) error {
-	h := &editHandler{configsPath: configsPath, outDir: outDir}
+// editMux builds the editor's route table; kept separate from serveEdit so
+// tests exercise the real registered routes instead of re-dispatching.
+func editMux(h *editHandler, onShutdown func()) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.index)
 	mux.HandleFunc("GET /api/sites", h.sites)
@@ -41,14 +42,20 @@ func serveEdit(configsPath, outDir string) error {
 	mux.HandleFunc("POST /api/render", h.renderAll)
 	mux.HandleFunc("POST /api/save", h.save)
 	mux.HandleFunc("GET /api/ping", h.ping)
-	srv := &http.Server{Handler: mux} // #nosec G112 -- loopback dev tool
 	mux.HandleFunc("POST /api/shutdown", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			defer cancel()
-			_ = srv.Shutdown(ctx)
-		}()
+		go onShutdown()
+	})
+	return mux
+}
+
+func serveEdit(configsPath, outDir string) error {
+	h := &editHandler{configsPath: configsPath, outDir: outDir}
+	srv := &http.Server{} // #nosec G112 -- loopback dev tool
+	srv.Handler = editMux(h, func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
 	})
 	addr := "127.0.0.1:8181"
 	ln, err := net.Listen("tcp", addr)

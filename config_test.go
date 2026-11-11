@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -170,5 +171,38 @@ func TestApplyDefaultsFontsDir(t *testing.T) {
 	applyDefaults(&c2)
 	if c2.Render.FontsDir != "other" {
 		t.Fatalf("explicit fontsDir overridden: %q", c2.Render.FontsDir)
+	}
+}
+
+func TestIsSVGSource(t *testing.T) {
+	for src, want := range map[string]bool{
+		"a.svg":                          true,
+		"dir/B.SVG":                      true,
+		"data:image/svg+xml;base64,AAAA": true,
+		"a.png":                          false,
+		"data:image/png;base64,AAAA":     false,
+		"a.svgz":                         false,
+		"":                               false,
+	} {
+		if got := isSVGSource(src); got != want {
+			t.Errorf("isSVGSource(%q) = %v, want %v", src, got, want)
+		}
+	}
+}
+
+func TestImageSlotUnmarshal(t *testing.T) {
+	var s ImageSlot
+	if err := json.Unmarshal([]byte(`"a.svg"`), &s); err != nil || s.Src != "a.svg" {
+		t.Fatalf("string form: %v %+v", err, s)
+	}
+	s = ImageSlot{}
+	if err := json.Unmarshal([]byte(`{"src":"b.svg","fill":"#fff","stroke":"#000"}`), &s); err != nil ||
+		s.Src != "b.svg" || s.Fill != "#fff" || s.Stroke != "#000" {
+		t.Fatalf("object form: %v %+v", err, s)
+	}
+	for _, bad := range []string{`123`, `{"src":5}`, `{"nope":1}`, `[1]`} {
+		if err := json.Unmarshal([]byte(bad), &s); err == nil {
+			t.Errorf("input %s should be rejected", bad)
+		}
 	}
 }
