@@ -1,0 +1,317 @@
+package main
+
+import (
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	// #nosec G306 -- test fixture in a private t.TempDir().
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeTestPNG(t *testing.T, path string) {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	for y := 0; y < 4; y++ {
+		for x := 0; x < 4; x++ {
+			img.Set(x, y, color.RGBA{0, 0, 255, 128})
+		}
+	}
+	// #nosec G304 -- test fixture in a private t.TempDir().
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// fakeTool writes an executable script that copies fixture (or nothing) to its
+// last argument — stand-in for resvg/cwebp/avifenc, which all take the output
+// path last.
+func fakeTool(t *testing.T, dir, name, fixture string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	var script string
+	if fixture != "" {
+		script = "#!/bin/sh\nfor last; do :; done\ncp \"" + fixture + "\" \"$last\"\n"
+	} else {
+		script = "#!/bin/sh\nfor last; do :; done\ntouch \"$last\"\n"
+	}
+	// #nosec G306 -- fake tool script must be executable.
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestRenderTemplate(t *testing.T) {
+	dir := t.TempDir()
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg><text>{{text1}}</text><text>{{text2}}</text></svg>`)
+
+	cfg := Config{
+		Template: tpl,
+		Text:     map[string]string{"text1": `A <B> & "C"`, "text2": ""},
+	}
+	got, err := renderTemplate(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(got)
+	if !strings.Contains(s, `A &lt;B&gt; &amp; &#34;C&#34;`) {
+		t.Fatalf("text not XML-escaped: %s", s)
+	}
+	if strings.Contains(s, "{{") {
+		t.Fatalf("unresolved placeholder left: %s", s)
+	}
+}
+
+func TestRenderTemplateUnresolved(t *testing.T) {
+	dir := t.TempDir()
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg>{{text1}} {{image3}}</svg>`)
+	_, err := renderTemplate(Config{Template: tpl, Text: map[string]string{"text1": "x"}})
+	if err == nil || !strings.Contains(err.Error(), "unresolved placeholders: image3") {
+		t.Fatalf("want unresolved error, got %v", err)
+	}
+}
+
+func TestRenderTemplateEmptyImageSlot(t *testing.T) {
+	dir := t.TempDir()
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg><image href="{{image1}}"/></svg>`)
+	got, err := renderTemplate(Config{Template: tpl, Images: map[string]string{"image1": "  "}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), `href=""`) {
+		t.Fatalf("empty slot should render empty href: %s", got)
+	}
+}
+
+func TestRenderTemplateImageDataURI(t *testing.T) {
+	dir := t.TempDir()
+	imgPath := filepath.Join(dir, "pic.png")
+	writeTestPNG(t, imgPath)
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg><image href="{{image1}}"/></svg>`)
+
+	got, err := renderTemplate(Config{Template: tpl, Images: map[string]string{"image1": imgPath}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), `href="data:image/png;base64,`) {
+		t.Fatalf("image not embedded as data URI: %s", got)
+	}
+}
+
+func TestImageDataURI(t *testing.T) {
+	if got, err := imageDataURI("data:image/png;base64,AAAA"); err != nil || got != "data:image/png;base64,AAAA" {
+		t.Fatalf("data URI passthrough: %q %v", got, err)
+	}
+	for _, src := range []string{"https://x/p.png", "http://x/p.png"} {
+		if _, err := imageDataURI(src); err == nil {
+			t.Fatalf("remote URL %q should be rejected", src)
+		}
+	}
+	if _, err := imageDataURI(filepath.Join(t.TempDir(), "missing.png")); err == nil {
+		t.Fatal("missing file should error")
+	}
+	dir := t.TempDir()
+	gif := filepath.Join(dir, "x.gif")
+	writeFile(t, gif, "GIF89a")
+	if _, err := imageDataURI(gif); err == nil || !strings.Contains(err.Error(), "unsupported image type") {
+		t.Fatalf("want unsupported type error, got %v", err)
+	}
+}
+
+func TestMimeFor(t *testing.T) {
+	cases := map[string]string{
+		"a.png": "image/png", "a.JPG": "image/jpeg", "a.jpeg": "image/jpeg",
+		"a.svg": "image/svg+xml", "a.webp": "image/webp", "a.avif": "image/avif",
+	}
+	for path, want := range cases {
+		got, err := mimeFor(path)
+		if err != nil || got != want {
+			t.Errorf("mimeFor(%q) = %q,%v want %q", path, got, err, want)
+		}
+	}
+	if _, err := mimeFor("a.txt"); err == nil {
+		t.Error("txt should be unsupported")
+	}
+}
+
+func TestParseColor(t *testing.T) {
+	c, err := parseColor("#0369a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.R != 0x03 || c.G != 0x69 || c.B != 0xa1 || c.A != 0xff {
+		t.Fatalf("parseColor = %+v", c)
+	}
+	if _, err := parseColor("#fff"); err == nil {
+		t.Error("3-digit hex should be rejected")
+	}
+	if _, err := parseColor("blue"); err == nil {
+		t.Error("named color should be rejected")
+	}
+}
+
+func TestToolPath(t *testing.T) {
+	if p, err := toolPath("/bin/sh", "anything"); err != nil || p != "/bin/sh" {
+		t.Fatalf("absolute configured path: %q %v", p, err)
+	}
+	if _, err := toolPath("/nonexistent/tool", "sh"); err == nil {
+		t.Fatal("nonexistent absolute path should error")
+	}
+	if p, err := toolPath("sh", "definitely-not-sh"); err != nil || p == "" {
+		t.Fatalf("configured bare name should resolve via PATH: %q %v", p, err)
+	}
+	if p, err := toolPath("", "sh"); err != nil || p == "" {
+		t.Fatalf("PATH fallback: %q %v", p, err)
+	}
+	if _, err := toolPath("", "definitely-missing-tool-xyz"); err == nil {
+		t.Fatal("missing tool should error")
+	}
+}
+
+func TestResolveToolsMissing(t *testing.T) {
+	cfg := Config{Tools: ToolConfig{
+		Resvg: "/nonexistent/resvg", CWebP: "/nonexistent/cwebp", AvifEnc: "/nonexistent/avifenc",
+	}}
+	_, err := resolveTools(cfg, map[string]bool{"webp": true, "avif": true})
+	if err == nil {
+		t.Fatal("want missing tools error")
+	}
+	for _, name := range []string{"avifenc", "cwebp", "resvg"} {
+		if !strings.Contains(err.Error(), name) {
+			t.Fatalf("error should list %s: %v", name, err)
+		}
+	}
+	// webp not requested → cwebp absence must not fail
+	if _, err := resolveTools(cfg, map[string]bool{"png": true}); err == nil ||
+		strings.Contains(err.Error(), "cwebp") {
+		t.Fatalf("cwebp should not be required for png-only: %v", err)
+	}
+}
+
+func TestPngToJPEG(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "in.png")
+	dst := filepath.Join(dir, "out.jpg")
+	writeTestPNG(t, src)
+	if err := pngToJPEG(src, dst, 90, "#ffffff"); err != nil {
+		t.Fatal(err)
+	}
+	// #nosec G304 -- reading our own rendered output in a test.
+	b, err := os.ReadFile(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(b) < 2 || b[0] != 0xFF || b[1] != 0xD8 {
+		t.Fatal("output is not a JPEG")
+	}
+}
+
+func TestRenderSiteSVGOnly(t *testing.T) {
+	dir := t.TempDir()
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
+	out := filepath.Join(dir, "out", "site")
+
+	cfg := Config{Template: tpl, Text: map[string]string{"text1": "Hello"}}
+	cfg.Output.Formats = []string{"svg"}
+	if err := renderSite(cfg, out); err != nil {
+		t.Fatal(err)
+	}
+	// #nosec G304 -- reading our own rendered output in a test.
+	b, err := os.ReadFile(filepath.Join(out, "logo.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), ">Hello<") {
+		t.Fatalf("placeholder not filled: %s", b)
+	}
+	if _, err := os.Stat(filepath.Join(out, "logo.png")); !os.IsNotExist(err) {
+		t.Fatal("png should not exist for svg-only formats")
+	}
+}
+
+func TestRenderSiteFakeTools(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	// #nosec G301 -- test fixture in a private t.TempDir().
+	if err := os.Mkdir(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fixture := filepath.Join(dir, "fixture.png")
+	writeTestPNG(t, fixture)
+
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
+	out := filepath.Join(dir, "out", "site")
+
+	cfg := Config{
+		Template: tpl,
+		Text:     map[string]string{"text1": "x"},
+		Tools: ToolConfig{
+			Resvg:   fakeTool(t, bin, "resvg", fixture),
+			CWebP:   fakeTool(t, bin, "cwebp", ""),
+			AvifEnc: fakeTool(t, bin, "avifenc", ""),
+		},
+	}
+	applyDefaults(&cfg)
+	cfg.Output.Formats = []string{"svg", "png", "jpg", "webp", "avif"}
+	if err := renderSite(cfg, out); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"logo.svg", "logo.png", "logo.jpg", "logo.webp", "logo.avif"} {
+		if _, err := os.Stat(filepath.Join(out, f)); err != nil {
+			t.Errorf("missing output %s", f)
+		}
+	}
+}
+
+func TestRenderSiteRemovesIntermediatePNG(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	// #nosec G301 -- test fixture in a private t.TempDir().
+	if err := os.Mkdir(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
+	out := filepath.Join(dir, "out", "site")
+
+	cfg := Config{
+		Template: tpl,
+		Text:     map[string]string{"text1": "x"},
+		Tools: ToolConfig{
+			Resvg: fakeTool(t, bin, "resvg", ""),
+			CWebP: fakeTool(t, bin, "cwebp", ""),
+		},
+	}
+	applyDefaults(&cfg)
+	cfg.Output.Formats = []string{"svg", "webp"}
+	if err := renderSite(cfg, out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "logo.webp")); err != nil {
+		t.Fatal("logo.webp missing")
+	}
+	if _, err := os.Stat(filepath.Join(out, "logo.png")); !os.IsNotExist(err) {
+		t.Fatal("intermediate logo.png should be removed")
+	}
+}

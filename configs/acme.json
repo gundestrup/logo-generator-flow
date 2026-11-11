@@ -1,0 +1,23 @@
+{
+  "name": "acme",
+  "template": "templates/logo.svg",
+  "output": {
+    "formats": ["svg", "png", "webp", "avif"]
+  },
+  "render": {
+    "width": 1600,
+    "webpQuality": 92,
+    "avifQuality": 82,
+    "avifSpeed": 4
+  },
+  "text": {
+    "text1": "Acme Corporation",
+    "text2": "Industrial solutions since 1949",
+    "text3": "Quality you can rely on",
+    "text4": "acme.example.com"
+  },
+  "images": {
+    "image1": "assets/images/mark.svg",
+    "image2": "assets/images/photo.png"
+  }
+}

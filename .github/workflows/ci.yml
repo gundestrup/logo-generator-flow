@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    container:
+      image: golang:1.27.3-trixie@sha256:7b072c590a326b9d2a43b165ae247f6e8eafff32e1ad154ab97139e89f053be9
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
+      - name: Check version drift, formatting, vet, tests, race safety and build
+        run: make check
+      # End-to-end smoke: svg-only render needs no external tools.
+      - name: Smoke test (svg-only render)
+        run: |
+          mkdir -p /tmp/smoke
+          cat > /tmp/smoke/site.json <<'EOF'
+          {"name": "smoke", "template": "templates/logo.svg",
+           "output": {"formats": ["svg"]},
+           "text": {"text1": "CI", "text2": "", "text3": "", "text4": ""},
+           "images": {"image1": "", "image2": ""}}
+          EOF
+          ./logo-generator -configs /tmp/smoke -out /tmp/smoke-out
+          test -s /tmp/smoke-out/smoke/logo.svg
+
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Codecov OIDC tokenless upload
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # Self-hosted SonarQube users: also set the SONAR_HOST_URL secret;
+      # when absent the scan defaults to SonarCloud.
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Produce coverage
+        run: go test -race -coverprofile=coverage.out ./...
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: coverage.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+      - name: SonarQube/SonarCloud scan
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+      # Hard gate on reachable advisories — fix via toolchain/module bumps,
+      # not suppression.
+      - name: govulncheck reachable-vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.181.0@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
+      # Registry rulesets need network to semgrep.dev; .semgrepignore keeps
+      # generated assets out. --error makes any finding fail the job.
+      - name: Semgrep SAST
+        run: semgrep scan --config p/golang --config p/security-audit --metrics=off --error
+
+  frontend:
+    runs-on: ubuntu-latest
+    container:
+      image: node:26.12.1-bookworm@sha256:52dd743dc3b494cba5bc8c13507ac984507addb8a087c626dc98dcffa53133d4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
+      - name: Install locked frontend tools
+        run: npm ci --ignore-scripts
+      - name: Check JavaScript, HTML, and formatting
+        run: npm run check
+      - name: Audit frontend tool dependencies
+        run: npm audit --audit-level=high

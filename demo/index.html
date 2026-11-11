@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>logo-generator — pipeline demo</title>
+    <style>
+      :root {
+        --bg: #0b1220;
+        --panel: #131c2e;
+        --border: #24334f;
+        --text: #dbe4f3;
+        --dim: #8ba0c2;
+        --accent: #38bdf8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 -apple-system,
+          "SF Mono",
+          Menlo,
+          monospace,
+          sans-serif;
+      }
+      header {
+        display: flex;
+        align-items: baseline;
+        gap: 16px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0;
+      }
+      h1 span {
+        color: var(--accent);
+      }
+      select {
+        background: var(--panel);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 6px 10px;
+        font: inherit;
+      }
+      .grid {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .card h2 {
+        margin: 0;
+        padding: 10px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--dim);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .card h2 .num {
+        display: inline-grid;
+        place-items: center;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #04121f;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .card .body {
+        padding: 14px;
+        flex: 1;
+      }
+      pre {
+        margin: 0;
+        font-size: 12px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 480px;
+        overflow: auto;
+        color: var(--text);
+      }
+      .preview {
+        display: grid;
+        place-items: center;
+        background: repeating-conic-gradient(#1a2438 0 25%, #131c2e 0 50%) 0 0 /
+          20px 20px;
+        border-radius: 8px;
+        padding: 16px;
+        min-height: 160px;
+      }
+      .preview img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+      }
+      .formats {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+      }
+      .formats figure {
+        margin: 0;
+        text-align: center;
+      }
+      .formats img {
+        width: 120px;
+        height: 72px;
+        object-fit: contain;
+        border-radius: 6px;
+        background: repeating-conic-gradient(#1a2438 0 25%, #131c2e 0 50%) 0 0 /
+          16px 16px;
+        border: 1px solid var(--border);
+        padding: 4px;
+      }
+      .formats figcaption {
+        font-size: 11px;
+        color: var(--dim);
+        margin-top: 4px;
+      }
+      details {
+        margin-top: 12px;
+      }
+      summary {
+        cursor: pointer;
+        color: var(--dim);
+        font-size: 12px;
+      }
+      .err {
+        color: #f87171;
+        padding: 14px;
+      }
+      .hint {
+        color: var(--dim);
+        font-size: 12px;
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>logo-generator <span>demo</span></h1>
+      <label
+        >site
+        <select id="site"></select
+      ></label>
+      <span class="hint">config → template → generated output</span>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>
+          <span class="num">1</span> config
+          <span id="cfg-name" class="hint"></span>
+        </h2>
+        <div class="body"><pre id="config">loading…</pre></div>
+      </section>
+
+      <section class="card">
+        <h2>
+          <span class="num">2</span> template
+          <span id="tpl-name" class="hint"></span>
+        </h2>
+        <div class="body">
+          <div class="preview"><img id="tpl-img" alt="template preview" /></div>
+          <details>
+            <summary>template source</summary>
+            <pre id="tpl-src"></pre>
+          </details>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>
+          <span class="num">3</span> generated
+          <span class="hint">output/&lt;name&gt;/logo.*</span>
+        </h2>
+        <div class="body">
+          <div class="preview"><img id="gen-img" alt="generated logo" /></div>
+          <div class="formats" id="formats"></div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const RASTER = ["png", "webp", "avif", "jpg"];
+
+      async function fetchText(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`${r.status} ${url}`);
+        return r.text();
+      }
+
+      function fail(where, err) {
+        $(where).innerHTML =
+          `<div class="err">${err.message}<br><br>` +
+          `Serve the repo root (fetch is blocked on file://):<br>` +
+          `<code>make demo</code> → http://localhost:8080/demo/</div>`;
+      }
+
+      async function load(site) {
+        $("config").textContent = "loading…";
+        $("formats").innerHTML = "";
+        let cfg;
+        try {
+          const raw = await fetchText(`../configs/${site}.json`);
+          cfg = JSON.parse(raw);
+          $("config").textContent = JSON.stringify(cfg, null, 2);
+          $("cfg-name").textContent = `configs/${site}.json`;
+        } catch (e) {
+          return fail("config", e);
+        }
+
+        try {
+          const tplPath = `../${cfg.template}`;
+          $("tpl-src").textContent = await fetchText(tplPath);
+          $("tpl-img").src = tplPath;
+          $("tpl-name").textContent = cfg.template;
+        } catch (e) {
+          $("tpl-src").textContent = "";
+          $("tpl-img").removeAttribute("src");
+          $("tpl-name").textContent = cfg.template + " (not found)";
+        }
+
+        $("gen-img").src = `../output/${site}/logo.svg`;
+        for (const fmt of RASTER) {
+          const src = `../output/${site}/logo.${fmt}`;
+          const fig = document.createElement("figure");
+          const img = document.createElement("img");
+          img.src = src;
+          img.alt = fmt;
+          img.onerror = () => fig.remove(); // hide formats that were not generated
+          const cap = document.createElement("figcaption");
+          cap.textContent = fmt;
+          fig.append(img, cap);
+          $("formats").appendChild(fig);
+        }
+      }
+
+      (async () => {
+        try {
+          const sites = JSON.parse(await fetchText("sites.json"));
+          $("site").innerHTML = sites
+            .map((s) => `<option>${s}</option>`)
+            .join("");
+          $("site").onchange = (e) => load(e.target.value);
+          load(sites[0]);
+        } catch (e) {
+          fail("config", e);
+        }
+      })();
+    </script>
+  </body>
+</html>

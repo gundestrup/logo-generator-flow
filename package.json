@@ -1,0 +1,22 @@
+{
+  "name": "logo-generator-flow",
+  "version": "0.1.0",
+  "description": "Per-site JSON configs -> {{slot}} SVG template -> resvg/cwebp/avifenc logo pipeline",
+  "license": "AGPL-3.0-or-later",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26.12.1"
+  },
+  "scripts": {
+    "demo:media": "sh scripts/docs-demo.sh",
+    "lint:frontend": "biome lint demo/*.html docs/assets/*.html scripts/*.mjs",
+    "format:check": "prettier --check package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"docs/assets/*.html\"",
+    "format": "prettier --write package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"docs/assets/*.html\"",
+    "check": "npm run lint:frontend && npm run format:check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "prettier": "3.9.10"
+  }
+}

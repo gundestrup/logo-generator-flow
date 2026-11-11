@@ -1,0 +1,21 @@
+{
+  "name": "northwind",
+  "template": "templates/logo.svg",
+  "output": {
+    "formats": ["svg", "png", "jpg"]
+  },
+  "render": {
+    "jpegQuality": 94,
+    "jpegBackground": "#ffffff"
+  },
+  "text": {
+    "text1": "Northwind Traders",
+    "text2": "Global import & export",
+    "text3": "Est. 1994",
+    "text4": "northwind.example.com"
+  },
+  "images": {
+    "image1": "assets/images/badge.svg",
+    "image2": "assets/images/photo.png"
+  }
+}
