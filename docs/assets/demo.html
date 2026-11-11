@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 16px 28px;
+        background: #0b1220;
+        color: #dbe4f3;
+      }
+      h1 {
+        font-size: 19px;
+        margin: 0 0 3px;
+      }
+      h1 span {
+        color: #38bdf8;
+      }
+      h2 {
+        font-size: 13px;
+        color: #8ba0c2;
+        margin: 0 0 10px;
+        font-weight: 500;
+      }
+      section {
+        background: #131c2e;
+        border: 1px solid #24334f;
+        border-radius: 10px;
+        padding: 8px 14px;
+        margin-bottom: 8px;
+      }
+      .term {
+        font:
+          11.5px/1.55 ui-monospace,
+          Menlo,
+          monospace;
+        background: #0a0f1a;
+        border: 1px solid #24334f;
+        border-radius: 8px;
+        padding: 8px 12px;
+        white-space: pre;
+        color: #c9d6ea;
+      }
+      .term .p {
+        color: #38bdf8;
+      }
+      .term .ok {
+        color: #34d399;
+      }
+      .cards {
+        display: flex;
+        gap: 8px;
+        align-items: stretch;
+      }
+      .mini {
+        flex: 1;
+        background: #0a0f1a;
+        border: 1px solid #24334f;
+        border-radius: 8px;
+        padding: 7px 9px;
+        min-width: 0;
+      }
+      .mini b {
+        display: block;
+        font-size: 10px;
+        color: #8ba0c2;
+        font-weight: 600;
+        margin-bottom: 5px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .mini code {
+        display: block;
+        font:
+          9.5px/1.45 ui-monospace,
+          monospace;
+        color: #c4b5fd;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .mini img {
+        width: 100%;
+        height: 78px;
+        object-fit: contain;
+        background: #0f1830;
+        border-radius: 5px;
+      }
+      .arrow {
+        align-self: center;
+        color: #38bdf8;
+        font-size: 15px;
+      }
+      .browser {
+        border: 1px solid #24334f;
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: #0a0f1a;
+        padding: 5px 9px;
+        font-size: 10px;
+        color: #8ba0c2;
+      }
+      .bar i {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #334155;
+        display: inline-block;
+      }
+      .bar i:nth-child(1) {
+        background: #f87171;
+      }
+      .bar i:nth-child(2) {
+        background: #fbbf24;
+      }
+      .bar i:nth-child(3) {
+        background: #34d399;
+      }
+      .url {
+        background: #131c2e;
+        border-radius: 9px;
+        padding: 1px 10px;
+        font:
+          9.5px ui-monospace,
+          monospace;
+        color: #38bdf8;
+      }
+      .panes {
+        display: flex;
+        gap: 8px;
+        padding: 7px;
+      }
+      .panes .mini {
+        height: 78px;
+      }
+      .panes .mini img {
+        height: 46px;
+      }
+      .tag {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        background: #38bdf8;
+        color: #04121f;
+        font-size: 9px;
+        font-weight: 700;
+        border-radius: 8px;
+        padding: 1px 7px;
+      }
+      section {
+        position: relative;
+      }
+      body[data-step="1"] .s1,
+      body[data-step="2"] .s2,
+      body[data-step="3"] .s3 {
+        outline: 3px solid #38bdf8;
+        outline-offset: -3px;
+      }
+      body[data-step="1"] .s2,
+      body[data-step="1"] .s3,
+      body[data-step="2"] .s1,
+      body[data-step="2"] .s3,
+      body[data-step="3"] .s1,
+      body[data-step="3"] .s2 {
+        opacity: 0.4;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>logo-generator</h1>
+    <h2>
+      per-site JSON configs → {{slot}} SVG template → resvg · cwebp · avifenc
+    </h2>
+
+    <section class="s1">
+      <span class="tag">CLI</span>
+      <div class="term">
+        <span class="p">$</span> ./logo-generator <span class="p">==</span> acme
+        (configs/acme.json) <span class="ok">wrote</span> output/acme/logo.svg
+        <span class="ok">wrote</span> output/acme/logo.png
+        <span class="ok">wrote</span> output/acme/logo.webp
+        <span class="ok">wrote</span> output/acme/logo.avif
+        <span class="p">==</span> northwind (configs/northwind.json)
+        <span class="ok">wrote</span> output/northwind/logo.svg · png · jpg
+        <span class="ok">done:</span> 2 site(s) → output/&lt;name&gt;/logo.*
+      </div>
+    </section>
+
+    <section class="s2">
+      <span class="tag">pipeline</span>
+      <div class="cards">
+        <div class="mini">
+          <b>configs/acme.json</b
+          ><code
+            >{"name":"acme", "text":{"text1":"Acme Corp"}, "images":{"image1":
+            "assets/images/mark.svg"}}</code
+          >
+        </div>
+        <span class="arrow">→</span>
+        <div class="mini">
+          <b>templates/logo.svg</b><img src="../../templates/logo.svg" alt="" />
+        </div>
+        <span class="arrow">→</span>
+        <div class="mini">
+          <b>output/acme/logo.*</b
+          ><img src="../../output/acme/logo.png" alt="" />
+        </div>
+      </div>
+    </section>
+
+    <section class="s3">
+      <span class="tag">GUI</span>
+      <div class="browser">
+        <div class="bar">
+          <i></i><i></i><i></i><span class="url">localhost:8080/demo/</span>
+        </div>
+        <div class="panes">
+          <div class="mini">
+            <b>1 · config</b><code>{"name":"acme", "text1":"Acme Corp"}</code>
+          </div>
+          <div class="mini">
+            <b>2 · template</b><img src="../../templates/logo.svg" alt="" />
+          </div>
+          <div class="mini">
+            <b>3 · generated</b><img src="../../output/acme/logo.png" alt="" />
+          </div>
+        </div>
+      </div>
+    </section>
+    <script>
+      document.body.dataset.step =
+        new URLSearchParams(location.search).get("step") || "0";
+    </script>
+  </body>
+</html>

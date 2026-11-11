@@ -1,0 +1,4 @@
+# Generated/binary content not worth scanning
+output/
+assets/
+demo/

@@ -1,0 +1,33 @@
+# Build artifacts
+/logo-generator
+*.exe
+*.test
+*.out
+
+# Generated output
+output/*
+!output/.gitkeep
+
+# Coverage
+coverage.out
+coverage.html
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# Personal Devin-agent permission overrides
+.devin/config.local.json
+
+# Node
+/node_modules/
+
+# Demo-media working frames (regenerate via scripts/docs-demo.sh)
+/data/
+
+# Tooling caches
+.semgrep-cache/
