@@ -41,7 +41,6 @@ func renderSite(cfg Config, outDir string) error {
 
 	stem := filepath.Join(outDir, "logo")
 	svgPath := stem + ".svg"
-	pngPath := stem + ".png"
 
 	// #nosec G306 -- generated web assets are intentionally world-readable.
 	if err := os.WriteFile(svgPath, svg, 0o644); err != nil {
@@ -49,41 +48,51 @@ func renderSite(cfg Config, outDir string) error {
 	}
 	fmt.Println("  wrote", svgPath)
 
-	wanted := map[string]bool{}
-	for _, f := range cfg.Output.Formats {
-		wanted[normalizeFormat(f)] = true
-	}
+	wanted := formatsSet(cfg.Output.Formats)
 	if !wanted["png"] && !wanted["jpg"] && !wanted["webp"] && !wanted["avif"] {
 		return nil
 	}
+	return renderRasters(cfg, wanted, stem, svgPath)
+}
 
+func formatsSet(formats []string) map[string]bool {
+	wanted := map[string]bool{}
+	for _, f := range formats {
+		wanted[normalizeFormat(f)] = true
+	}
+	return wanted
+}
+
+// renderRasters renders the master PNG via resvg and converts it into every
+// requested derived format. The intermediate PNG is removed unless "png" is
+// among the wanted formats.
+func renderRasters(cfg Config, wanted map[string]bool, stem, svgPath string) error {
 	tools, err := resolveTools(cfg, wanted)
 	if err != nil {
 		return err
 	}
-
+	pngPath := stem + ".png"
 	if err := svgToPNG(cfg, tools.resvg, svgPath, pngPath); err != nil {
 		return err
 	}
 	fmt.Println("  wrote", pngPath)
 
-	if wanted["jpg"] {
-		if err := pngToJPEG(pngPath, stem+".jpg", cfg.Render.JPEGQuality, cfg.Render.Background); err != nil {
-			return err
-		}
-		fmt.Println("  wrote", stem+".jpg")
+	converts := []struct {
+		format string
+		fn     func() error
+	}{
+		{"jpg", func() error { return pngToJPEG(pngPath, stem+".jpg", cfg.Render.JPEGQuality, cfg.Render.Background) }},
+		{"webp", func() error { return pngToWebP(cfg, tools.cwebp, pngPath, stem+".webp") }},
+		{"avif", func() error { return pngToAVIF(cfg, tools.avifenc, pngPath, stem+".avif") }},
 	}
-	if wanted["webp"] {
-		if err := pngToWebP(cfg, tools.cwebp, pngPath, stem+".webp"); err != nil {
+	for _, c := range converts {
+		if !wanted[c.format] {
+			continue
+		}
+		if err := c.fn(); err != nil {
 			return err
 		}
-		fmt.Println("  wrote", stem+".webp")
-	}
-	if wanted["avif"] {
-		if err := pngToAVIF(cfg, tools.avifenc, pngPath, stem+".avif"); err != nil {
-			return err
-		}
-		fmt.Println("  wrote", stem+".avif")
+		fmt.Println("  wrote", stem+"."+c.format)
 	}
 	if !wanted["png"] {
 		if err := os.Remove(pngPath); err != nil && !errors.Is(err, os.ErrNotExist) {

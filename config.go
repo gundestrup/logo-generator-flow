@@ -103,12 +103,29 @@ func applyDefaults(c *Config) {
 }
 
 func validateConfig(c Config) error {
+	if err := validateIdentity(c); err != nil {
+		return err
+	}
+	if err := validateSlots(c); err != nil {
+		return err
+	}
+	if err := validateRender(c.Render); err != nil {
+		return err
+	}
+	return validateFormats(c.Output.Formats)
+}
+
+func validateIdentity(c Config) error {
 	if !siteName.MatchString(c.Name) {
 		return fmt.Errorf("invalid or missing name %q: use [A-Za-z0-9_-], max 64 chars", c.Name)
 	}
 	if c.Template == "" {
 		return errors.New("template is required")
 	}
+	return nil
+}
+
+func validateSlots(c Config) error {
 	for key := range c.Text {
 		if !textSlot.MatchString(key) {
 			return fmt.Errorf("invalid text field %q: use text1-text4", key)
@@ -119,26 +136,32 @@ func validateConfig(c Config) error {
 			return fmt.Errorf("invalid image field %q: use image1-image4", key)
 		}
 	}
+	return nil
+}
+
+func validateRender(r RenderConfig) error {
 	for name, q := range map[string]int{
-		"jpegQuality": c.Render.JPEGQuality,
-		"webpQuality": c.Render.WebPQuality,
-		"avifQuality": c.Render.AVIFQuality,
+		"jpegQuality": r.JPEGQuality,
+		"webpQuality": r.WebPQuality,
+		"avifQuality": r.AVIFQuality,
 	} {
 		if q < 1 || q > 100 {
 			return fmt.Errorf("%s must be 1-100", name)
 		}
 	}
-	if c.Render.AVIFSpeed < 0 || c.Render.AVIFSpeed > 10 {
+	if r.AVIFSpeed < 0 || r.AVIFSpeed > 10 {
 		return errors.New("avifSpeed must be 0-10")
 	}
-	if c.Render.Width < 0 || c.Render.Height < 0 {
+	if r.Width < 0 || r.Height < 0 {
 		return errors.New("width/height must be >= 0")
 	}
-	if _, err := parseColor(c.Render.Background); err != nil {
-		return err
-	}
+	_, err := parseColor(r.Background)
+	return err
+}
+
+func validateFormats(formats []string) error {
 	seen := map[string]bool{}
-	for _, f := range c.Output.Formats {
+	for _, f := range formats {
 		norm := normalizeFormat(f)
 		if norm == "" {
 			return fmt.Errorf("unknown format: %s", f)
