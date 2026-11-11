@@ -193,8 +193,8 @@ files get fill + stroke color inputs and a × reset), a font dropdown lists `ass
 the selected `textN` slot's `{"text", "color"}` object form.
 
 **map template…** analyzes the configured template's `id`'d elements and
-opens a modal listing each region with its bounding box; assigning a slot
-per element and clicking **apply** writes `templates/<name>-filled.svg` —
+opens a modal listing each region with its bounding box; assigning an element
+per slot and clicking **apply** writes `templates/<name>-filled.svg` —
 figure outlines become `<image>` elements at their box geometry (aspect
 preserved via `xMidYMid meet`), text elements distribute assigned slots
 across their tspans. Path boxes are min/max over `d` coordinates — exact
