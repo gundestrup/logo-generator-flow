@@ -62,6 +62,7 @@ go build -o logo-generator .
 ./logo-generator -configs site.json     # single config file
 ./logo-generator -sites acme            # only matching site names
 ./logo-generator -out output            # output root (default: output)
+./logo-generator -ui                    # browser editor → http://127.0.0.1:8181/
 ```
 
 Each site writes to `output/<name>/logo.<ext>`:
@@ -122,7 +123,7 @@ Rules:
   (`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`); names must be unique across configs.
 - `template` is required and points at the original (unfilled) SVG template —
   per site, so different sites may use different templates.
-- Text fields are fixed slots `text1`–`text4`; image fields `image1`–`image4`.
+- Text fields are fixed slots `text1`–`text6`; image fields `image1`–`image6`.
   Unused slots are simply omitted, and empty values (`"text3": ""`,
   `"image2": ""`) are accepted and render nothing. Any other key is a config
   error.
@@ -190,6 +191,14 @@ thumbnail popup of `assets/images/` for the chosen `imageN` slot (svg
 files get a fill color input), a font dropdown lists `assets/fonts/`
 (sets `render.fontFiles` + `render.fontFamily`), and a color input sets
 the selected `textN` slot's `{"text", "color"}` object form.
+
+**map template…** analyzes the configured template's `id`'d elements and
+opens a modal listing each region with its bounding box; assigning a slot
+per element and clicking **apply** writes `templates/<name>-filled.svg` —
+figure outlines become `<image>` elements at their box geometry (aspect
+preserved via `xMidYMid meet`), text elements distribute assigned slots
+across their tspans. Path boxes are min/max over `d` coordinates — exact
+for absolute-coordinate outlines.
 
 ## Development
 

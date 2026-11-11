@@ -8,7 +8,7 @@
 
 Go CLI that renders per-site logos: every `configs/*.json` is a site
 definition (`name` → `output/<name>/logo.*`), merged into an SVG template via
-fixed `{{text1..4}}` / `{{image1..4}}` slots. `resvg` produces the master PNG;
+fixed `{{text1-6}}` / `{{image1..6}}` slots. `resvg` produces the master PNG;
 `cwebp`/`avifenc`/Go stdlib derive WebP/AVIF/JPEG from it, so all rasters are
 pixel-identical. Images embed as base64 data URIs; remote URLs are rejected.
 
