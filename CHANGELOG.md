@@ -110,8 +110,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `aspect-ratio`+`contain:size`, `scrollbar-gutter:stable` on `html`.
 - `GET /favicon.ico` 404'd (wvf info); serves an inline SVG mark.
 - `/static/*` responses now carry `Cache-Control: public, max-age=3600`
-  (embedded assets only change with the binary); `app.js` loads `defer`;
-  injected `@font-face` rules use `font-display:swap`.
+  (embedded assets only change with the binary); injected `@font-face`
+  rules use `font-display:swap`.
+- `defer` on `app.js` broke Alpine init: deferred scripts execute in
+  document order, so `alpine-csp.min.js` ran before the `alpine:init`
+  listener registered — every expression failed `Undefined variable`,
+  leaving the image-picker modal visible with dead buttons. `app.js`
+  now loads first in `<head>` (both deferred), and the three `x-show`
+  overlays carry `hidden` so a broken init degrades gracefully instead
+  of blocking the page.
 
 ## [0.1.1] - 2026-11-11
 
