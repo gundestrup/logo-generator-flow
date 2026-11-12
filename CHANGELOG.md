@@ -109,9 +109,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fixed-width, `#status` truncates, `.preview` reserves
   `aspect-ratio`+`contain:size`, `scrollbar-gutter:stable` on `html`.
 - `GET /favicon.ico` 404'd (wvf info); serves an inline SVG mark.
-- `/static/*` responses now carry `Cache-Control: public, max-age=3600`
-  (embedded assets only change with the binary); injected `@font-face`
-  rules use `font-display:swap`.
+- `/static/*` responses carry `Cache-Control: no-cache` — the same URL
+  serves new bytes after a rebuild, and `max-age` caching once stranded
+  a stale `app.js` in the browser for an hour (a dead-UI bug). Injected
+  `@font-face` rules use `font-display:swap`.
 - Editor column layout: generated card sat 12px higher and inter-column
   gaps were uneven (Bulma column-padding model vs an unwrapped
   `card column`) — all three columns are now wrapped `.column`s with a

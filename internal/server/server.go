@@ -172,11 +172,12 @@ func (h *handler) index(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(b)
 }
 
-// cacheStatic marks embedded UI assets as cacheable for the editor session;
-// they only change with a new binary build.
+// cacheStatic makes embedded UI assets revalidate every load — the same
+// URL serves different bytes after a rebuild, and a long max-age once
+// stranded a stale app.js in the browser for an hour.
 func cacheStatic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Header().Set("Cache-Control", "no-cache")
 		next.ServeHTTP(w, r)
 	})
 }
