@@ -22,6 +22,17 @@ function injectSvg(host, svg) {
   });
 }
 
+// aspectOf returns the svg's w/h ratio from its viewBox (falling back to
+// width/height attrs) — used to size preview boxes so tall templates
+// aren't clipped by a hardcoded ratio.
+function aspectOf(svg) {
+  const vb = svg?.viewBox?.baseVal;
+  if (vb?.width > 0 && vb?.height > 0) return vb.width / vb.height;
+  const w = svg?.width?.baseVal?.value;
+  const h = svg?.height?.baseVal?.value;
+  return w > 0 && h > 0 ? w / h : null;
+}
+
 document.addEventListener("alpine:init", () => {
   Alpine.data("editor", () => ({
     sites: [],
@@ -113,11 +124,13 @@ document.addEventListener("alpine:init", () => {
         const d = await j("GET", `/api/site?name=${encodeURIComponent(name)}`);
         this.configText = d.config;
         injectSvg(this.$refs.tpl, d.template || "");
-        // Size the stage from the viewBox immediately — without this
-        // it collapses until template-analyze lands (grid shifts).
-        const tsv = this.$refs.tpl.querySelector("svg")?.viewBox?.baseVal;
-        if (tsv?.width > 0 && tsv?.height > 0)
-          this.$refs.tplStage.style.aspectRatio = `${tsv.width} / ${tsv.height}`;
+        // Size the stage + preview box from the viewBox immediately —
+        // without this they collapse/clip until analyze lands.
+        const r = aspectOf(this.$refs.tpl.querySelector("svg"));
+        if (r) {
+          this.$refs.tplStage.style.aspectRatio = `${r}`;
+          this.$refs.tplPreview.style.aspectRatio = `${r}`;
+        }
         this.filesList = [];
         if (this.draft) this.closeEditor();
         this.preview();
@@ -151,6 +164,7 @@ document.addEventListener("alpine:init", () => {
       }
       const [minX, minY, vbW, vbH] = this.tplBox.map(Number);
       this.$refs.tplStage.style.aspectRatio = `${vbW} / ${vbH}`;
+      this.$refs.tplPreview.style.aspectRatio = `${vbW} / ${vbH}`;
       for (const e of this.regions) {
         const d = document.createElement("div");
         d.dataset.el = e.id;
@@ -195,6 +209,8 @@ document.addEventListener("alpine:init", () => {
         }
         const d = await j("POST", "/api/preview", body);
         injectSvg(this.$refs.gen, d.svg);
+        const r = aspectOf(this.$refs.gen.querySelector("svg"));
+        if (r) this.$refs.gen.style.aspectRatio = `${r}`;
         this.status("");
       } catch (e) {
         this.status(e.message, false);

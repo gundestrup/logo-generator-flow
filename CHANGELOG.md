@@ -112,6 +112,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/static/*` responses now carry `Cache-Control: public, max-age=3600`
   (embedded assets only change with the binary); injected `@font-face`
   rules use `font-display:swap`.
+- Tall templates (e.g. 900×950) were clipped by the `.preview` box's
+  hardcoded `aspect-ratio:1200/630` + `contain:size` — the stage had
+  the right ratio but its parent didn't. Preview boxes now adopt the
+  injected SVG's own viewBox/width-height ratio.
 - `defer` on `app.js` broke Alpine init: deferred scripts execute in
   document order, so `alpine-csp.min.js` ran before the `alpine:init`
   listener registered — every expression failed `Undefined variable`,
