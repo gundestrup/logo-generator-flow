@@ -157,7 +157,10 @@ error instead of producing partial output.
 
 resvg uses the system fonts by default. For reproducible output across
 machines, drop font files in `assets/fonts/` — it is picked up automatically
-(`--use-fonts-dir`) when no explicit `fontsDir` is set. To ignore system fonts
+(`--use-fonts-dir`) when no explicit `fontsDir` is set. Setting `fontFamily`
+overrides every `font-family` attribute in the template (explicit `[font:…]`
+markup in text slots still wins) and sets resvg's default font — use the
+font's real family name, not the file name. To ignore system fonts
 entirely and use only the bundled ones:
 
 ```json

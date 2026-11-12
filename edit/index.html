@@ -452,6 +452,7 @@
         }
       }
 
+      let fonts = [];
       let regions = null,
         tplBox = null;
       const slotMap = {};
@@ -623,10 +624,14 @@
         try {
           const prev = $("font").value;
           const d = await j("GET", "/api/fonts");
+          fonts = d.fonts;
           $("font").innerHTML =
             `<option value="">—</option>` +
             d.fonts
-              .map((f) => `<option value="${f.path}">${f.name}</option>`)
+              .map(
+                (f) =>
+                  `<option value="${f.path}">${f.name}${f.family ? ` — ${f.family}` : ""}</option>`,
+              )
               .join("");
           $("font").value = prev;
         } catch {
@@ -637,10 +642,13 @@
       $("font").onchange = () => {
         const path = $("font").value;
         if (!path) return;
-        const family = path
-          .split("/")
-          .pop()
-          .replace(/\.[^.]+$/, "");
+        const it = fonts.find((f) => f.path === path);
+        const family =
+          it?.family ||
+          path
+            .split("/")
+            .pop()
+            .replace(/\.[^.]+$/, "");
         patch((o) => {
           o.render ||= {};
           o.render.fontFiles = [path];

@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   insert `assets/images/*` into `image1-4` (with an svg fill-recolor
   option, separate fill + stroke pickers), pick `assets/fonts/*` into `render.fontFiles`/`fontFamily`,
   and set per-slot text colors.
+- Font picker now works end-to-end: `/api/fonts` reports each font's real
+  family name (parsed from the sfnt name table), `render.fontFamily`
+  overrides the template's `font-family` attributes (`[font:…]` markup
+  still wins locally), and the preview injects `@font-face` for the
+  configured files so custom fonts render in the browser too.
 - Template mapping flow: `POST /api/template-analyze` lists `id`'d
   elements with bounding boxes; `POST /api/template-fill` rewrites a
   template into `{{slot}}` form — figure boxes become `<image>` elements

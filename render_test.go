@@ -420,3 +420,30 @@ func TestRecolorDataURI(t *testing.T) {
 		t.Fatal("bad base64 must error")
 	}
 }
+
+func TestFontFamilyOverride(t *testing.T) {
+	dir := t.TempDir()
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg xmlns="http://www.w3.org/2000/svg"><text font-family="Old Font" x="0" y="10">{{text1}}</text></svg>`)
+	cfg := validConfig()
+	cfg.Template = tpl
+	cfg.Render.FontFamily = "New Font"
+	cfg.Text = map[string]TextSlot{"text1": {Value: `plain [font:Keep]styled[/]`}}
+	out, err := renderTemplate(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, `<text font-family="New Font"`) {
+		t.Fatalf("template font not overridden: %s", s)
+	}
+	if !strings.Contains(s, `font-family="Keep"`) {
+		t.Fatalf("styled [font:] run must keep its family: %s", s)
+	}
+	// Unset → template untouched.
+	cfg.Render.FontFamily = ""
+	out, _ = renderTemplate(cfg)
+	if !strings.Contains(string(out), `font-family="Old Font"`) {
+		t.Fatal("template font changed without fontFamily")
+	}
+}
