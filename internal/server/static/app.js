@@ -136,10 +136,10 @@ document.addEventListener("alpine:init", () => {
       this.sites = d.sites;
       this.$nextTick(() => {
         const q = new URLSearchParams(location.search).get("site");
-        const first = d.sites.includes(q) ? q : d.sites[0];
-        if (first) {
-          this.site = first;
-          this.loadSite(first);
+        const hit = d.sites.find((s) => s.file === q) || d.sites[0];
+        if (hit) {
+          this.site = hit.file;
+          this.loadSite(hit.file);
         }
       });
     },
@@ -523,6 +523,26 @@ document.addEventListener("alpine:init", () => {
         });
         this.mapOpen = false;
         this.status(`wrote ${d.template}`, true);
+      } catch (e) {
+        this.status(e.message, false);
+      }
+    },
+
+    async dupSite() {
+      const to = prompt(
+        `duplicate configs/${this.site}.json as:`,
+        `${this.site}-copy`,
+      );
+      if (!to) return;
+      try {
+        await j(
+          "POST",
+          `/api/duplicate?name=${encodeURIComponent(this.site)}&to=${encodeURIComponent(to)}`,
+        );
+        await this.loadSites();
+        this.site = to;
+        this.loadSite(to);
+        this.status(`duplicated → configs/${to}.json`, true);
       } catch (e) {
         this.status(e.message, false);
       }

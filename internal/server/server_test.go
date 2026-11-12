@@ -59,13 +59,57 @@ func TestEditSites(t *testing.T) {
 		t.Fatalf("status %d", w.Code)
 	}
 	var res struct {
-		Sites []string `json:"sites"`
+		Sites []siteEntry `json:"sites"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Sites) != 1 || res.Sites[0] != "acme" {
-		t.Fatalf("sites = %v", res.Sites)
+	if len(res.Sites) != 1 || res.Sites[0] != (siteEntry{Name: "acme", File: "acme"}) {
+		t.Fatalf("sites = %+v", res.Sites)
+	}
+}
+
+func TestEditSitesNameField(t *testing.T) {
+	h := newEditTestHandler(t)
+	// file name and config name may differ — the dropdown shows "name".
+	other := strings.ReplaceAll(editTestConfig, `"name": "acme"`, `"name": "Display Name"`)
+	if err := os.WriteFile(filepath.Join(h.configsPath, "odd-file.json"), []byte(other), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	w := doEdit(h, "GET", "/api/sites", "")
+	var res struct {
+		Sites []siteEntry `json:"sites"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Sites) != 2 || res.Sites[1] != (siteEntry{Name: "Display Name", File: "odd-file"}) {
+		t.Fatalf("sites = %+v", res.Sites)
+	}
+}
+
+func TestDuplicate(t *testing.T) {
+	h := newEditTestHandler(t)
+	w := doEdit(h, "POST", "/api/duplicate?name=acme&to=acme-two", "")
+	if w.Code != 200 {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	b, err := os.ReadFile(filepath.Join(h.configsPath, "acme-two.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var probe struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(b, &probe); err != nil || probe.Name != "acme-two" {
+		t.Fatalf("name = %q err=%v", probe.Name, err)
+	}
+	// refuses to clobber an existing file, and validates the new name.
+	if w := doEdit(h, "POST", "/api/duplicate?name=acme&to=acme-two", ""); w.Code != 400 {
+		t.Fatalf("clobber status %d", w.Code)
+	}
+	if w := doEdit(h, "POST", "/api/duplicate?name=acme&to=bad%2Fname", ""); w.Code != 400 {
+		t.Fatalf("invalid name status %d", w.Code)
 	}
 }
 

@@ -343,11 +343,18 @@
         >site
         <span class="select is-small">
           <select x-model="site" x-on:change="loadSite(site)" aria-label="site">
-            <template x-for="s in sites" :key="s">
-              <option x-bind:value="s" x-text="s"></option>
+            <template x-for="s in sites" :key="s.file">
+              <option x-bind:value="s.file" x-text="s.name"></option>
             </template>
           </select>
         </span> </label
+      ><button
+        type="button"
+        class="button is-small"
+        title="duplicate this config"
+        x-on:click="dupSite()"
+      >
+        ⧉</button
       ><button type="button" class="button is-small" x-on:click="renderAll()">
         render all formats
       </button>

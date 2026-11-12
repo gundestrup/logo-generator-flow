@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Duplicate a config from the editor: ⧉ button next to the site select
+  prompts for a new file name and `POST /api/duplicate?name=…&to=…`
+  copies the config (rewriting its `name` field), refusing to overwrite
+  an existing file.
+- `/api/sites` now returns `{name, file}` pairs — the site dropdown
+  shows each config's own `name` field while endpoints keep addressing
+  files by basename.
 - `make bump V=x.y.z` (`scripts/bump-version.sh`) — one-command release
   bump: writes VERSION and copies it into the places that must hold it
   statically (package.json field, README shields badge, new dated

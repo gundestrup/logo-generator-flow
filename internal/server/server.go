@@ -54,6 +54,7 @@ func Mux(h *handler, onShutdown func()) *http.ServeMux {
 	mux.HandleFunc("POST /api/preview", h.preview)
 	mux.HandleFunc("POST /api/render", h.renderAll)
 	mux.HandleFunc("POST /api/save", h.save)
+	mux.HandleFunc("POST /api/duplicate", h.duplicate)
 	mux.HandleFunc("GET /api/ping", h.ping)
 	mux.HandleFunc("POST /api/shutdown", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -189,17 +190,36 @@ func (h *handler) favicon(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="4" fill="#0b1220"/><path d="M4 8h8M8 4v8" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/></svg>`))
 }
 
+// siteEntry is one configs/*.json file: file is the API key (basename
+// without .json), name is the config's own "name" field shown in the UI.
+type siteEntry struct {
+	Name string `json:"name"`
+	File string `json:"file"`
+}
+
 func (h *handler) sites(w http.ResponseWriter, _ *http.Request) {
 	files, err := config.Files(h.configsPath)
 	if err != nil {
 		jsonErr(w, err)
 		return
 	}
-	names := make([]string, 0, len(files))
+	sites := make([]siteEntry, 0, len(files))
 	for _, f := range files {
-		names = append(names, strings.TrimSuffix(filepath.Base(f), ".json"))
+		e := siteEntry{File: strings.TrimSuffix(filepath.Base(f), ".json")}
+		if b, rerr := os.ReadFile(f); rerr == nil { // #nosec G304 -- f comes from config.Files under configsPath
+			var probe struct {
+				Name string `json:"name"`
+			}
+			if json.Unmarshal(b, &probe) == nil {
+				e.Name = probe.Name
+			}
+		}
+		if e.Name == "" {
+			e.Name = e.File
+		}
+		sites = append(sites, e)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sites": names})
+	writeJSON(w, http.StatusOK, map[string]any{"sites": sites})
 }
 
 func (h *handler) site(w http.ResponseWriter, r *http.Request) {
@@ -507,6 +527,50 @@ func (h *handler) save(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"saved": path})
 }
+
+// duplicate copies configs/<name>.json to configs/<to>.json, rewriting the
+// "name" field so the copy is a valid standalone site. `to` must not exist
+// yet — duplicates never clobber an existing config.
+func (h *handler) duplicate(w http.ResponseWriter, r *http.Request) {
+	src, err := h.configPath(r.URL.Query().Get("name"))
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	dst, err := h.configPath(r.URL.Query().Get("to"))
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	body, err := os.ReadFile(src) // #nosec G304 -- name is regex-validated, path joins configsPath
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	if _, statErr := os.Stat(dst); statErr == nil {
+		jsonErr(w, fmt.Errorf("%s already exists", filepath.Base(dst)))
+		return
+	}
+	to := r.URL.Query().Get("to")
+	enc, _ := json.Marshal(to) // always ValidSiteName here — safe chars
+	if nameRe.Match(body) {
+		body = nameRe.ReplaceAll(body, []byte(`"name": `+string(enc)))
+	} else {
+		body = append([]byte(`{"name": `+string(enc)+`,`), body[1:]...)
+	}
+	if _, err := config.Parse(body); err != nil {
+		jsonErr(w, fmt.Errorf("duplicate would be invalid: %w", err))
+		return
+	}
+	if err := os.WriteFile(dst, body, 0o644); err != nil { // #nosec G306 -- site configs are committed files, not secrets
+		jsonErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"saved": dst})
+}
+
+// nameRe targets the top-level "name" field for duplicate's rewrite.
+var nameRe = regexp.MustCompile(`"name"\s*:\s*"([^"\\]|\\.)*"`)
 
 // assetList serves the contents of an assets subdirectory as
 // {key: [{name, path, svg}]}; a missing dir yields an empty list.
