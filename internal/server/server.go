@@ -38,8 +38,10 @@ var staticFS embed.FS
 func Mux(h *handler, onShutdown func()) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.index)
+	mux.HandleFunc("GET /favicon.ico", h.favicon)
 	sub, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(sub)))
+	mux.Handle("GET /static/", http.StripPrefix("/static/",
+		cacheStatic(http.FileServerFS(sub))))
 	mux.HandleFunc("GET /api/sites", h.sites)
 	mux.HandleFunc("GET /api/site", h.site)
 	mux.HandleFunc("GET /api/images", h.assetList("assets/images", "images"))
@@ -170,6 +172,21 @@ func (h *handler) index(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(b)
 }
 
+// cacheStatic marks embedded UI assets as cacheable for the editor session;
+// they only change with a new binary build.
+func cacheStatic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *handler) favicon(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "image/svg+xml")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="4" fill="#0b1220"/><path d="M4 8h8M8 4v8" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/></svg>`))
+}
+
 func (h *handler) sites(w http.ResponseWriter, _ *http.Request) {
 	files, err := config.Files(h.configsPath)
 	if err != nil {
@@ -281,7 +298,7 @@ func (h *handler) injectFontFaces(svg string, cfg config.Config) string {
 	sort.Strings(names)
 	var rules strings.Builder
 	for _, fam := range names {
-		fmt.Fprintf(&rules, `@font-face{font-family:'%s';src:url('/asset/fonts/%s')}`,
+		fmt.Fprintf(&rules, `@font-face{font-family:'%s';font-display:swap;src:url('/asset/fonts/%s')}`,
 			fam, url.PathEscape(filepath.Base(fams[fam])))
 	}
 	i := strings.Index(svg, "<svg")

@@ -29,6 +29,9 @@
       * {
         box-sizing: border-box;
       }
+      html {
+        scrollbar-gutter: stable;
+      }
       body {
         margin: 0;
         padding: 16px;
@@ -46,6 +49,13 @@
         gap: 12px;
         margin-bottom: 14px;
         flex-wrap: wrap;
+      }
+      header select {
+        width: 170px;
+      }
+      .select,
+      .select select {
+        max-width: 100%;
       }
       h1 {
         font-size: 18px;
@@ -141,14 +151,22 @@
         border-radius: 8px;
         padding: 10px;
         min-height: 120px;
+        aspect-ratio: 1200 / 630;
+        contain: size;
+        overflow: hidden;
       }
       .preview svg {
         max-width: 100%;
+        max-height: 100%;
         height: auto;
       }
       #status {
         font-size: 12px;
         min-height: 1.6em;
+        max-width: 32ch;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       input[type="color"] {
         width: 34px;
@@ -327,7 +345,7 @@
           <div class="body">
             <label
               >font
-              <span class="select is-small">
+              <span class="select is-small is-fullwidth">
                 <select
                   x-model="fontSel"
                   x-on:focus="loadFonts()"
@@ -618,6 +636,6 @@
         </button>
       </div>
     </div>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js" defer></script>
   </body>
 </html>

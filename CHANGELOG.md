@@ -103,6 +103,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strips runes XML 1.0 forbids.
 - `fontFamily` had no effect on templates declaring fonts via `<style>`
   CSS rules (the common Illustrator/Inkscape export form).
+- Editor CLS 0.177 → 0 (wvf/measured): the font `<select>` sized to its
+  widest async-loaded option (~467 px) and reflowed all Bulma columns —
+  `is-fullwidth` caps it at the label's width; header site select is
+  fixed-width, `#status` truncates, `.preview` reserves
+  `aspect-ratio`+`contain:size`, `scrollbar-gutter:stable` on `html`.
+- `GET /favicon.ico` 404'd (wvf info); serves an inline SVG mark.
+- `/static/*` responses now carry `Cache-Control: public, max-age=3600`
+  (embedded assets only change with the binary); `app.js` loads `defer`;
+  injected `@font-face` rules use `font-display:swap`.
 
 ## [0.1.1] - 2026-11-11
 
