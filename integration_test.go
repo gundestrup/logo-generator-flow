@@ -21,9 +21,7 @@ func TestIntegrationRealTools(t *testing.T) {
 	}
 	dir := t.TempDir()
 	for _, d := range []string{"configs", "templates", "img"} {
-		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
-			t.Fatal(err)
-		}
+		mustMkdir(t, filepath.Join(dir, d))
 	}
 	t.Chdir(dir)
 	writeFile(t, "templates/it.svg", `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60">

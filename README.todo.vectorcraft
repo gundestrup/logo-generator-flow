@@ -1,0 +1,227 @@
+# TODO: `.vectorcraft` template support
+
+> **Goal:** dual template support — accept `configs/*.json` `template` paths
+> ending in `.vectorcraft` in addition to `.svg`, so the VectorCraft file is
+> the single source of truth and no manual export + slot-edit step is needed.
+>
+> Status: **analysis complete, not implemented.** Everything below was
+> verified against `Borg-Collective_template.vectorcraft` (VectorCraft
+> 0.23.0) and the current codebase on 2026-11-12.
+
+---
+
+## 1. The `.vectorcraft` format
+
+Open JSON serialization of VectorCraft's internal document model (Rust
+workspace `storytold/vectorcraft`, ~354k LoC; schema = serde dump of its
+`doc` crate). **No Go/Rust-external library exists** — nobody has written
+third-party bindings; at v0.23 the schema can still drift.
+
+Top level (`format: "vectorcraft"`, `version: 4`, `document: {...}`):
+
+```
+document
+├── artboards[]        rect x0,y0,x1,y1 → 900×950 px here
+├── layers[]           kind.type "layer"; children nest groups/paths/text
+├── swatches[] / swatch_groups[] / graphic_styles[]
+├── images{}           placed rasters (empty in our file — all vector)
+└── metadata / guides / grid / last_view …
+```
+
+Node kinds (tagged union under `kind.type`):
+
+| kind        | Payload                                                        |
+| ----------- | -------------------------------------------------------------- |
+| `layer`     | `children[]`, `color`, `template`, `printable`                   |
+| `group`     | `children[]`, `clip` bool                                        |
+| `path`      | `path.subpaths[]` → `anchors[]{p:[x,y], in?, out?}`, `closed`    |
+| `compound`  | `children[]` of paths (fill-rule)                               |
+| `text`      | `kind.kind` = `point`/`area`, `xf` matrix, `runs[]` w/ style     |
+
+Appearance lives **on the node** (`appearance.items[]`): `fill`/`stroke`
+items, `paint.type` = `solid`/`none` (+`gradient`, `pattern` in the full
+format). Colors: `{model: "rgb", r,g,b}` floats 0–1 (also `gray`, `cmyk`).
+
+### Census of `Borg-Collective_template.vectorcraft`
+
+Everything this file uses — the importer subset:
+
+- 4 layers (incl. nested `Layer 4`), 1 group, **67 paths**, 2 compounds,
+  5 point-texts; **0** gradients/patterns/effects/dashes/opacity items
+- Appearances: 68 fills + 8 strokes, all `solid`/`none`, all `model:rgb`
+- 5 `live` rectangles — **ignore `live`**: baked `path` data exists anyway
+- 1 clip group (`clipping:true` path + `clip:true` group)
+- Coordinates are top-left origin, y-down — map **directly** to SVG
+
+### Layer inventory
+
+| Layer          | Contents |
+| -------------- | -------- |
+| `Layer 2`      | Borg cube art (~48 clipped paths) + nested `Layer 4` (GitHub-mark glyph) + **stray off-canvas text** `"Sample copy flows here…"` at (871,−252) — delete in VectorCraft |
+| `Layer 1`      | Static chrome: rounded-rect border (#101826/16px), 4 skeleton bars, divider |
+| **`UI change`** | The dynamic layer — see §3 |
+
+## 2. Slot mapping discovered (`UI change` layer, id=71)
+
+Element **names survive export as SVG `id`s** (already proven:
+`templates/borg-collective.svg` is this file's export + `{{slots}}`):
+
+| Element       | Type / geometry                          | Current slot |
+| ------------- | ---------------------------------------- | ------------ |
+| `Center`      | rect 450×449.7 @ (225,85.3), r=12        | `{{image1}}` |
+| `TopLeft`     | rect 168.5×163.7 @ (180,37.9)            | `{{image2}}` |
+| `TopRight`    | rect 168.5×163.7 @ (551.5,37.9)          | `{{image3}}` |
+| `LowerLeft`   | rect 168.5×163.7 @ (180,416.3)           | `{{image4}}` |
+| `LowerRight`  | rect 168.5×163.7 @ (551.5,416.3)         | `{{image5}}` |
+| `name`        | text, 5 styled runs (dark/green/red)     | `{{text1}}` (+empty tspans cls-45/37/41) |
+| `TagLine`     | text 32px #6b7280                        | `{{text3}}` |
+| `github-path` | text 25px #6b7280                        | `{{text4}}` |
+| *(unnamed)*   | text "BORG-COLLECTIVE.EU" @ (754,938)    | **hardcoded — GAP** |
+
+**Gaps:** domain text has no slot → name it (e.g. `domain`) and map
+`{{text2}}`. `text5`/`text6`/`image6` unused.
+
+## 3. What already exists in the codebase
+
+| Machinery | Location | Reuse |
+| --------- | -------- | ----- |
+| `templateFill(svg, mapping)` | `edit.go:598` | figures → `<image href="{{slot}}">` at bbox; `<text>` → slots distributed over tspans. **The whole slot-injection step is done.** |
+| `analyzeTemplate(svg)` | `edit.go:542` | inventories `id`'d elements + bboxes → powers auto-mapping |
+| `templateFillValidate` | `edit.go:725` | mapping validation (`textN`/`imageN` keys) |
+| `toolPath`, `run` | `render.go` | external-binary plumbing (resvg/cwebp/avifenc pattern) |
+| `ToolConfig` struct | `config.go` | add `vectorcraft` path field |
+| Fake-tool test stubs | `render_test.go` etc. | convention: stub binary writes canned output |
+
+## 4. Options evaluated
+
+| Option | Cost | Verdict |
+| ------ | ---- | ------- |
+| **A. Go importer** (`.vectorcraft` → slotted SVG natively) | ~400–600 LoC for *this* subset; but silent-fidelity risk on every new format feature; we own VectorCraft's export job | Only if a dependency-free binary matters |
+| **B. `vectorcraft-cli` shell-out** ← **recommended** | ~140 LoC + tests; reuses `toolPath`/`run`/`templateFill`; VectorCraft's own fidelity | **Do this** |
+| **C. `make` step** (export + fill offline, commit slotted SVG) | least code; but keeps dual-source drift risk | Fallback if CLI unavailable |
+
+## 5. Recommended design (Option B)
+
+```
+configs/x.json template="…/*.vectorcraft"
+        │
+        ▼
+resolveTemplate()                       ← NEW
+  1. suffix .vectorcraft? → export via vectorcraft-cli → temp SVG
+     (else: read template as today)
+  2. analyzeTemplate(svg) → find slot elements
+  3. derive mapping (see §6) → templateFill(svg, mapping)
+        │
+        ▼   identical slotted-SVG intermediate
+existing merge (styledText, data-URIs) → resvg → PNG/WebP/AVIF/JPEG
+```
+
+Everything downstream of the slotted SVG is **untouched**.
+
+### Toolchain on this machine (verified)
+
+- `/Applications/VectorCraft.app` v0.23.0 installed; bundle contains **only**
+  the GUI binary. `vectorcraft-cli` is a separate binary in their `apps/`
+  workspace — **not installed** (`cargo build -p vectorcraft-cli` or a
+  release build needed).
+- GUI binary has a fallback automation channel:
+  `VectorCraft --control <port>` → localhost **JSON-lines control server**
+  (with `--automation-read-root`/`--automation-write-root` sandboxing);
+  `engine.execute file.export.svg` accepts `{styling, outlineText,
+  objectIds, decimals, minify, embedFonts, …}`. Works today but spawns the
+  GUI — prefer `vectorcraft-cli` when available.
+
+### New code sketch
+
+```go
+// vectorcraft.go
+// resolveTemplate returns template SVG bytes; a .vectorcraft source is
+// exported via vectorcraft-cli then slot-filled by element name.
+func resolveTemplate(c Config) ([]byte, error) {
+    b, err := os.ReadFile(c.Template)
+    if !strings.HasSuffix(strings.ToLower(c.Template), ".vectorcraft") {
+        return b, err               // .svg — unchanged path
+    }
+    svg, err := exportVectorcraft(toolPath(c.Tools.Vectorcraft, "vectorcraft-cli"), c.Template)
+    if err != nil { return nil, err }
+    return templateFill(svg, slotMapping(svg, c))
+}
+
+// exportVectorcraft mirrors svgToPNG: build args, run(), wrap error.
+// EXACT CLI SYNTAX UNVERIFIED — see §7 first task.
+
+// slotMapping: names in the slots layer equal slot names → {name: name};
+// otherwise fall back to c.Slots (optional config map) or analyzeTemplate
+// candidates for the editor's "map template" flow.
+```
+
+Wire-in point: wherever the template file is read before merge (one call
+site swap, ~10 LoC). `ToolConfig` gains `Vectorcraft string \`json:"vectorcraft"\``.
+
+## 6. Slot contract — the dedicated-layer convention
+
+**Recommendation: layer named `slots` (keep `UI change`) + element names =
+slot names** (`text1`…`text6`, `image1`…`image6`). Then:
+
+- Mapping is `{name: name}` — **zero config fields**, self-documenting in
+  the VectorCraft layers panel
+- `analyzeTemplate` restricts candidates to `<g id="UI_change">` children →
+  no artwork paths with stray `id`s can be picked up accidentally
+- Validation errors become crisp: "template has no `UI change` layer" /
+  "element `image3` named but missing"
+
+Semantic names (`Center`, `TagLine`) still work via the existing
+"map template" UI or an optional `"slots": {"image1": "Center"}` config
+map — the layer convention just removes the need.
+
+Bonus trick for text: a VectorCraft text object may literally contain
+`{{text1}}` — exported SVG then needs **no fill pass at all** for text
+(`templateFill` still required to turn figure rects into `<image>`).
+
+## 7. Verification tasks before coding
+
+1. **Get `vectorcraft-cli`** and confirm headless export:
+   `vectorcraft-cli export Borg-Collective_template.vectorcraft --format svg -o /tmp/t.svg`
+   (exact flags TBD — `vectorcraft-cli --help`). Confirm `objectIds`
+   preserves `Center`/`TagLine`/`UI change` as SVG ids, and check
+   `decimals`/`minify` defaults.
+2. If no CLI release exists → decide: build from source (cargo), or use
+   `--control` protocol on the GUI binary (session API, heavier).
+3. Confirm resvg renders the CLI-exported SVG identically to the committed
+   `templates/borg-collective.svg` (fonts: file styles say *Source Sans 3*;
+   `render.fontFamily` overrides all `font-family` decls anyway).
+4. Decide temp vs. cache: export to `os.MkdirTemp` per run (simple,
+   mirrors current temp-SVG flow for resvg) — no caching needed at this
+   render size.
+
+## 8. Implementation checklist
+
+- [ ] `vectorcraft-cli` available; syntax verified (§7.1)
+- [ ] `ToolConfig.Vectorcraft` + `toolPath` entry; error message mirrors
+      `missing tool(s)` convention (README: `brew install …`)
+- [ ] `vectorcraft.go`: `resolveTemplate`, `exportVectorcraft`, `slotMapping`
+- [ ] render path calls `resolveTemplate` for both CLI and `-ui` editor
+- [ ] `templateFill` reuse — confirm exported `id` attrs match (objectIds)
+- [ ] tests: fake `vectorcraft-cli` stub writing canned SVG; mapping tests
+      for name==slot convention + `slots` map + missing-layer error
+- [ ] `configs/` schema doc + README section (`.vectorcraft` templates,
+      `slots` layer convention, `tools.vectorcraft`)
+- [ ] rename layer `UI change` → keep or `slots`; name domain text + map
+      `{{text2}}`; delete stray "Sample copy" text in Layer 2
+- [ ] integration test (`//go:build integration`) with real binary
+
+## 9. Risks / gotchas
+
+- **Format drift:** v0.23 serde schema — pin expected `format`/`version`
+  on parse; error loudly on unknown `kind.type`/appearance kinds, never
+  silently drop (this matters more for Option A, but also for validating
+  the CLI export path).
+- **Hidden/template layers:** VectorCraft `template:true`/hidden layers
+  may or may not export — assert slot elements survive.
+- **Fonts:** typography lives in the file but `render.fontFamily` (and
+  `[font:…]` markup) override — document that vectorcraft fonts are
+  nominal unless `fontFamily` is unset.
+- **Images dict:** placed rasters embed in a binary tail section — the
+  pure-JSON reader must tolerate it; our file has none.
+- **CLI availability:** adds a 4th external tool dependency; gate behind
+  `.vectorcraft` suffix so `.svg`-only users need nothing new.

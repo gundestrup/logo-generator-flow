@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -51,7 +53,7 @@ func editMux(h *editHandler, onShutdown func()) *http.ServeMux {
 	return mux
 }
 
-func serveEdit(configsPath, outDir string) error {
+func serveEdit(configsPath, outDir, addr string) error {
 	h := &editHandler{configsPath: configsPath, outDir: outDir}
 	srv := &http.Server{} // #nosec G112 -- loopback dev tool
 	srv.Handler = editMux(h, func() {
@@ -59,7 +61,6 @@ func serveEdit(configsPath, outDir string) error {
 		defer cancel()
 		_ = srv.Shutdown(ctx)
 	})
-	addr := "127.0.0.1:8181"
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		if !stopStaleEditor(addr) {
@@ -130,6 +131,10 @@ func listenWhenFree(addr string, timeout time.Duration) (net.Listener, error) {
 type editHandler struct {
 	configsPath string
 	outDir      string
+	fontsDir    string // assets/fonts unless overridden (tests)
+	fontMu      sync.Mutex
+	fontIdx     map[string]string
+	fontIdxAt   time.Time
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -223,36 +228,64 @@ func (h *editHandler) preview(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"svg": injectFontFaces(string(svg), cfg)})
+	writeJSON(w, http.StatusOK, map[string]string{"svg": h.injectFontFaces(string(svg), cfg)})
 }
 
-// injectFontFaces adds <style>@font-face</style> rules for configured font
-// files under assets/fonts so the browser preview renders custom fonts.
-// Rasters don't need it — resvg loads the same files via --use-font-file.
-func injectFontFaces(svg string, cfg Config) string {
-	var rules strings.Builder
+var fontFamilyVal = regexp.MustCompile(
+	`font-family="([^"]*)"|font-family='([^']*)'|font-family\s*:\s*((?:&[#a-zA-Z0-9]+;|[^;}])*)`)
+
+// injectFontFaces adds <style>@font-face</style> rules covering every
+// font-family the SVG references — configured files plus anything matching
+// an assets/fonts file — so the browser preview renders custom fonts.
+// Rasters don't need it: resvg loads the same files via --use-font-file.
+func (h *editHandler) injectFontFaces(svg string, cfg Config) string {
+	dir := h.fontsDir
+	if dir == "" {
+		dir = "assets/fonts"
+	}
+	fams := map[string]string{} // family → font file
 	for _, f := range cfg.Render.FontFiles {
-		if filepath.ToSlash(filepath.Dir(f)) != "assets/fonts" {
+		if filepath.ToSlash(filepath.Dir(f)) != filepath.ToSlash(dir) {
 			continue
 		}
 		fam := fontFamilyName(f)
 		if fam == "" {
 			fam = cfg.Render.FontFamily
 		}
-		fam = strings.Map(func(r rune) rune {
-			if strings.ContainsRune(`';{}\\`, r) {
-				return -1
-			}
-			return r
-		}, fam)
-		if fam == "" {
-			continue
+		if fam = cssSafe(fam); fam != "" {
+			fams[fam] = f
 		}
-		fmt.Fprintf(&rules, `@font-face{font-family:'%s';src:url('/asset/fonts/%s')}`,
-			fam, url.PathEscape(filepath.Base(f)))
 	}
-	if rules.Len() == 0 {
+	for _, m := range fontFamilyVal.FindAllStringSubmatch(svg, -1) {
+		v := m[1]
+		if v == "" {
+			v = m[2]
+		}
+		if v == "" {
+			v = m[3]
+		}
+		for _, fam := range strings.Split(html.UnescapeString(v), ",") {
+			fam = cssSafe(strings.TrimSpace(fam))
+			if fam == "" || fams[fam] != "" {
+				continue
+			}
+			if p := h.fontIndex(dir)[fam]; p != "" {
+				fams[fam] = p
+			}
+		}
+	}
+	if len(fams) == 0 {
 		return svg
+	}
+	names := make([]string, 0, len(fams))
+	for fam := range fams {
+		names = append(names, fam)
+	}
+	sort.Strings(names)
+	var rules strings.Builder
+	for _, fam := range names {
+		fmt.Fprintf(&rules, `@font-face{font-family:'%s';src:url('/asset/fonts/%s')}`,
+			fam, url.PathEscape(filepath.Base(fams[fam])))
 	}
 	i := strings.Index(svg, "<svg")
 	if i < 0 {
@@ -267,6 +300,45 @@ func injectFontFaces(svg string, cfg Config) string {
 		return svg
 	}
 	return svg[:j+1] + "<style>" + rules.String() + "</style>" + svg[j+1:]
+}
+
+// cssSafe strips characters that could break out of a single-quoted CSS
+// declaration — family names and URLs come from font files on disk.
+func cssSafe(s string) string {
+	return strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`';{}\\`, r) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
+// fontIndex maps font family → file for everything parseable under dir,
+// rebuilt when the directory's mtime changes (fonts are dropped in ad hoc).
+func (h *editHandler) fontIndex(dir string) map[string]string {
+	st, err := os.Stat(dir)
+	h.fontMu.Lock()
+	defer h.fontMu.Unlock()
+	if err == nil && h.fontIdx != nil && st.ModTime().Equal(h.fontIdxAt) {
+		return h.fontIdx
+	}
+	idx := map[string]string{}
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			p := filepath.Join(dir, e.Name())
+			if fam := fontFamilyName(p); fam != "" {
+				idx[fam] = filepath.ToSlash(p)
+			}
+		}
+	}
+	h.fontIdx, h.fontIdxAt = idx, time.Time{}
+	if err == nil {
+		h.fontIdxAt = st.ModTime()
+	}
+	return idx
 }
 
 // fontFamilyName reads the family name out of a TTF/OTF/TTC sfnt name
@@ -421,23 +493,30 @@ func (h *editHandler) assetList(dir, key string) http.HandlerFunc {
 	}
 }
 
+// anchoredPath cleans a request path so ".." can never escape the serve
+// root: anchoring at "/" makes traversal collapse to the root, then the
+// leading slash is trimmed for a safe filepath.Join.
+func anchoredPath(p string) string {
+	return filepath.FromSlash(strings.TrimPrefix(
+		filepath.Clean("/"+strings.Trim(filepath.FromSlash(p), "/")), "/"))
+}
+
 // assetFile serves files under assets/images or assets/fonts for previews.
 func (h *editHandler) assetFile(w http.ResponseWriter, r *http.Request) {
-	p := strings.TrimPrefix(r.URL.Path, "/asset/")
-	rel := filepath.FromSlash(strings.TrimPrefix(
-		filepath.Clean("/"+strings.Trim(filepath.FromSlash(p), "/")), "/"))
+	rel := anchoredPath(strings.TrimPrefix(r.URL.Path, "/asset/"))
 	sub := strings.SplitN(rel, "/", 2)
 	if len(sub) != 2 || (sub[0] != "images" && sub[0] != "fonts") {
 		jsonErr(w, fmt.Errorf("invalid asset path"))
 		return
 	}
+	// Short cache: skips per-load revalidation of multi-hundred-KB font
+	// files; capped so a replaced asset can't look stale for long.
+	w.Header().Set("Cache-Control", "max-age=300")
 	http.ServeFile(w, r, filepath.Join("assets", rel)) // #nosec G703 -- path is root-anchored Clean + restricted to images|fonts
 }
 
 func (h *editHandler) outputFile(w http.ResponseWriter, r *http.Request) {
-	p := strings.TrimPrefix(r.URL.Path, "/out/")
-	// Anchor cleaning at "/" so ".." can never escape outDir.
-	rel := filepath.FromSlash(filepath.Clean("/" + strings.Trim(filepath.FromSlash(p), "/")))
+	rel := anchoredPath(strings.TrimPrefix(r.URL.Path, "/out/"))
 	http.ServeFile(w, r, filepath.Join(h.outDir, rel)) // #nosec G703 -- path is root-anchored Clean, cannot escape outDir
 }
 

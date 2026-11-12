@@ -67,7 +67,7 @@ go build -o logo-generator .
 
 Each site writes to `output/<name>/logo.<ext>`:
 
-```
+```text
 output/acme/logo.svg
 output/acme/logo.png
 output/acme/logo.webp
@@ -158,7 +158,8 @@ error instead of producing partial output.
 resvg uses the system fonts by default. For reproducible output across
 machines, drop font files in `assets/fonts/` — it is picked up automatically
 (`--use-fonts-dir`) when no explicit `fontsDir` is set. Setting `fontFamily`
-overrides every `font-family` attribute in the template (explicit `[font:…]`
+overrides the template's font declarations — `font-family` attributes and
+CSS `font-family:` rules inside `<style>` blocks — (explicit `[font:…]`
 markup in text slots still wins) and sets resvg's default font — use the
 font's real family name, not the file name. To ignore system fonts
 entirely and use only the bundled ones:
@@ -186,26 +187,36 @@ with all produced raster formats.
 make edit   # ./logo-generator -ui (or -edit) → http://127.0.0.1:8181/
 ```
 
-The editor is a loopback-only UI (same three-pane layout) where you can
-edit a site's JSON, watch the SVG re-render live as you type, run
+The editor is a loopback-only UI in three columns — **global settings /
+edit / config** · **template** (+ regions card) · **generated** — where
+you can edit a site's JSON, watch the SVG re-render live, run
 **render all formats** to write `output/<name>/logo.*`, and **save** the
 config back to `configs/<name>.json`. No rasters are produced while
 editing — preview is SVG-only, so it works even without resvg/cwebp/
 avifenc installed.
 
-A toolbar adds pickers that patch the JSON directly: **pick…** opens a
-thumbnail popup of `assets/images/` for the chosen `imageN` slot (svg
-files get fill + stroke color inputs and a × reset), a font dropdown lists `assets/fonts/`
-(sets `render.fontFiles` + `render.fontFamily`), and a color input sets
-the selected `textN` slot's `{"text", "color"}` object form.
+**Global settings** holds the font dropdown (`assets/fonts/`, real
+family names — sets `render.fontFiles` + `render.fontFamily`).
+**Generated** holds a backdrop selector (checker/white/black/dark/
+custom) that only changes the CSS behind the preview, never the output.
 
-**map template…** analyzes the configured template's `id`'d elements and
-opens a modal listing each region with its bounding box; assigning an element
-per slot and clicking **apply** writes `templates/<name>-filled.svg` —
-figure outlines become `<image>` elements at their box geometry (aspect
-preserved via `xMidYMid meet`), text elements distribute assigned slots
-across their tspans. Path boxes are min/max over `d` coordinates — exact
-for absolute-coordinate outlines.
+Clicking a region in the template pane opens the contextual **edit**
+panel: text slots get a markup toolbar (B/I/U, inline color, per-run
+font), a content field, and a slot color; image slots get **pick…**
+(thumbnail popup of `assets/images/`), svg fill + stroke, and a × reset.
+Edits flow into a draft and re-render the generated preview immediately;
+**apply** (visible only when something changed) merges the draft into
+the JSON, and **save** writes it to disk.
+
+**map template…** (template headline, with the `outlines` toggle)
+analyzes the configured template's `id`'d elements and lists each
+region with its bounding box in a card below the template; assigning an
+element per slot and clicking **apply** writes
+`templates/<name>-filled.svg` — figure outlines become `<image>`
+elements at their box geometry (aspect preserved via `xMidYMid meet`),
+text elements distribute assigned slots across their tspans. Path boxes
+are min/max over `d` coordinates — exact for absolute-coordinate
+outlines.
 
 ## Development
 

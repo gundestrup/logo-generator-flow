@@ -14,12 +14,14 @@ pixel-identical. Images embed as base64 data URIs; remote URLs are rejected.
 
 ## Documentation index
 
-| Topic                                | Document             |
-| ------------------------------------ | -------------------- |
-| Usage, config schema, flags, fonts   | `README.md`          |
-| Current and unreleased changes       | `CHANGELOG.md`       |
-| App version (SemVer, build-injected) | `VERSION`            |
-| Agent permission policy              | `.devin/config.json` |
+| Topic                                | Document               |
+| ------------------------------------ | ---------------------- |
+| Usage, config schema, flags, fonts   | `README.md`            |
+| Current and unreleased changes       | `CHANGELOG.md`         |
+| Planned binary-release work          | `README.todo.build.md` |
+| App version (SemVer, build-injected) | `VERSION`              |
+| Agent permission policy              | `.devin/config.json`   |
+| Future tasks / implementation plans  | `README.todo.<topic>`  |
 
 ## Commands / Development
 
@@ -68,6 +70,25 @@ parseColor, slot unmarshalers and recolorSVG.
   assembles `docs/assets/demo/*.{png,apng,webp,avif,svg}`; working frames in
   `data/` (gitignored).
 
+## Working agreement
+
+- **Documentation is part of the change.** Any change to behavior, config
+  schema, flags, tools or workflow updates `README.md`, `CHANGELOG.md`,
+  this file and any relevant `README.todo.*` — in the same commit, not as
+  a follow-up.
+- **`README.todo.<topic>`** files hold analysis + suggestions for future
+  tasks/development (e.g. `README.todo.vectorcraft`). Create one when work
+  is analyzed but deferred; check for existing ones before starting
+  related work; keep them accurate and delete them once fully implemented.
+- **Tests cover new code.** Every new function/feature gets unit coverage
+  (temp dirs + fake tool stubs — see `render_test.go`/`edit_test.go`);
+  extend `fuzz_test.go` or `integration_test.go` where the pattern fits.
+  `go test -race ./...` must stay green.
+- **Changelog:** every user-facing change lands in the top `CHANGELOG.md`
+  section, keeping the `VERSION`/`package.json` sync rules above.
+- **Best practice:** smallest correct change, idiomatic Go, follow this
+  file's conventions; fail loudly rather than silently falling back.
+
 ## Known pitfalls
 
 - resvg renders with system fonts — ship fonts in `assets/fonts/`
@@ -79,13 +100,27 @@ parseColor, slot unmarshalers and recolorSVG.
 - `.semgrepignore` excludes `demo/`, `assets/`, `output/`; `data/` frames are
   regenerated, never committed.
 
-## Global knowledge
+## MCP servers & global knowledge
 
-<https://github.com/gundestrup/engineering-memory>
+Use the configured MCP servers proactively during tasks — they carry
+project context the repo alone does not.
 
-If the `knowledge-base` MCP server is configured (user scope), query the
-indexed corpus with `retrieve_knowledge`/`ask_knowledge` for "what do we know
-about X" questions before browsing the repo.
+- **`knowledge-base`** — indexed engineering corpus
+  (<https://github.com/gundestrup/engineering-memory>). Query with
+  `retrieve_knowledge`/`ask_knowledge` for "what do we know about X"
+  questions before browsing the repo or the web.
+- **`wvf`** — website-vitals monitoring (the sibling
+  Knowledge-BA46-Flow stack that these logos brand). `scan` a URL for
+  core web vitals + http checks (`deep` adds attribution + lighthouse;
+  `only` focuses it — `http`, `h3`, `images`, `js`, `css`, `vitals`),
+  `sites`/`history`/`run` list monitored sites and per-request run
+  detail, `jobs` shows background scan state.
+  - **HTML analysis & bug finding:** `scan` works on localhost too —
+    point it at `make demo` (`:8080`) or `make edit` (`:8181`) after
+    changing `edit/index.html`/`demo/` to catch broken links, 404'd
+    resources, bad response headers and JS/CSS issues before they reach
+    a browser. Use it for "how does site X perform" questions or to
+    validate rendered output on live pages.
 
 Relevant notes:
 

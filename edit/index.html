@@ -3,6 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%230b1220'/%3E%3Cpath d='M4 8h8M8 4v8' stroke='%2338bdf8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
     <title>logo-generator — editor</title>
     <style>
       :root {
@@ -63,6 +67,12 @@
         gap: 12px;
         height: calc(100vh - 90px);
       }
+      .col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+      }
       @media (max-width: 1100px) {
         .grid {
           grid-template-columns: 1fr;
@@ -90,6 +100,24 @@
       .card .body {
         padding: 10px;
         flex: 1;
+        overflow: auto;
+      }
+      .col .card {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .col .card:last-child {
+        flex: 1;
+      }
+      #tpl-card {
+        flex: 1;
+      }
+      #map-modal {
+        flex: 0 1 auto;
+        max-height: 60%;
+      }
+      .col .card .body {
         overflow: auto;
       }
       textarea {
@@ -206,12 +234,32 @@
         position: absolute;
         border: 2px dashed var(--dim);
         border-radius: 4px;
+        pointer-events: auto;
+        cursor: pointer;
       }
       .region.on {
         border-color: var(--accent);
       }
       .region.txt {
         border-style: dotted;
+      }
+      .region.sel {
+        border-color: #34d399;
+        border-style: solid;
+        background: rgba(52, 211, 153, 0.08);
+      }
+      #slot-editor textarea {
+        width: 100%;
+        min-height: 60px;
+      }
+      #se-body label {
+        display: block;
+        margin: 8px 0 2px;
+      }
+      #se-src {
+        font-size: 12px;
+        color: var(--dim);
+        word-break: break-all;
       }
       .region.txt.on {
         border-color: #34d399;
@@ -228,17 +276,17 @@
         border-radius: 3px;
         white-space: nowrap;
       }
-      .mk-tools {
+      .h2-tools {
         float: right;
         font-weight: 400;
         text-transform: none;
         letter-spacing: 0;
       }
-      .mk-tools button {
+      .h2-tools button {
         padding: 1px 8px;
         font-size: 12px;
       }
-      .mk-tools input[type="color"] {
+      .h2-tools input[type="color"] {
         width: 26px;
         height: 20px;
         vertical-align: middle;
@@ -276,104 +324,101 @@
       <button type="button" id="save" class="primary">save</button>
       <span id="status"></span>
     </header>
-    <div class="tools">
-      <label
-        >image
-        <select id="img-slot">
-          <option>image1</option>
-          <option>image2</option>
-          <option>image3</option>
-          <option>image4</option>
-          <option>image5</option>
-          <option>image6</option>
-        </select>
-      </label>
-      <button type="button" id="pick-img">pick…</button>
-      <button type="button" id="map-tpl">map template…</button>
-      <label
-        ><input type="checkbox" id="show-regions" checked /> outlines</label
-      >
-      <span id="img-color-wrap" hidden
-        ><label
-          >svg fill <input type="color" id="img-color" value="#ffffff"
-        /></label>
-        <label
-          >stroke <input type="color" id="img-stroke" value="#000000"
-        /></label>
-        <button type="button" id="img-color-clear" title="remove recolor">
-          ×
-        </button>
-      </span>
-      <label
-        >font
-        <select id="font">
-          <option value="">—</option>
-        </select></label
-      >
-      <label
-        >text
-        <select id="txt-slot">
-          <option>text1</option>
-          <option>text2</option>
-          <option>text3</option>
-          <option>text4</option>
-          <option>text5</option>
-          <option>text6</option>
-        </select>
-        <input type="color" id="txt-color" value="#ffffff" />
-      </label>
-    </div>
     <div class="grid">
-      <section class="card">
-        <h2>
-          config
-          <span class="mk-tools">
-            <button type="button" data-mk="b"><b>B</b></button>
-            <button type="button" data-mk="i"><i>I</i></button>
-            <button type="button" data-mk="u"><u>U</u></button>
-            <input
-              type="color"
-              id="mk-color"
-              value="#e45842"
-              title="wrap selection in [#hex]…[/]"
-              aria-label="inline text color"
-            />
-          </span>
-        </h2>
-        <div class="body">
-          <textarea
-            id="config"
-            spellcheck="false"
-            aria-label="site config JSON"
-          ></textarea>
-        </div>
-      </section>
-      <section class="card">
-        <h2>template</h2>
-        <div class="body">
-          <div class="preview">
-            <div id="tpl-stage">
-              <div id="tpl"></div>
-              <div id="tpl-overlay" hidden></div>
+      <div class="col">
+        <section class="card">
+          <h2>global settings</h2>
+          <div class="body">
+            <label
+              >font
+              <select id="font">
+                <option value="">—</option>
+              </select></label
+            >
+          </div>
+        </section>
+        <section class="card" id="slot-editor" hidden>
+          <h2>
+            edit <code id="se-name"></code>
+            <span class="h2-tools">
+              <button type="button" id="se-apply" class="primary">apply</button>
+              <button type="button" id="se-close" title="close">×</button>
+            </span>
+          </h2>
+          <div class="body" id="se-body"></div>
+        </section>
+        <section class="card">
+          <h2>config</h2>
+          <div class="body">
+            <textarea
+              id="config"
+              spellcheck="false"
+              aria-label="site config JSON"
+            ></textarea>
+          </div>
+        </section>
+      </div>
+      <div class="col">
+        <section class="card" id="tpl-card">
+          <h2>
+            template
+            <span class="h2-tools">
+              <label
+                ><input type="checkbox" id="show-regions" checked />
+                outlines</label
+              >
+              <button type="button" id="map-tpl">map template…</button>
+            </span>
+          </h2>
+          <div class="body">
+            <div class="preview">
+              <div id="tpl-stage">
+                <div id="tpl"></div>
+                <div id="tpl-overlay" hidden></div>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+        <section class="card" id="map-modal" hidden>
+          <h2>
+            template regions — assign each element a slot
+            <span class="h2-tools">
+              <button type="button" id="map-apply" class="primary">
+                apply
+              </button>
+              <button type="button" id="map-close">cancel</button>
+            </span>
+          </h2>
+          <div class="body" id="map-list"></div>
+        </section>
+      </div>
       <section class="card">
-        <h2>generated</h2>
+        <h2>
+          generated
+          <span class="h2-tools">
+            <label
+              >backdrop
+              <select id="backdrop" aria-label="preview backdrop">
+                <option value="">checker</option>
+                <option value="#ffffff">white</option>
+                <option value="#000000">black</option>
+                <option value="#1a2438">dark</option>
+                <option value="custom">custom…</option>
+              </select>
+              <input
+                type="color"
+                id="bg-color"
+                value="#888888"
+                hidden
+                aria-label="custom backdrop color"
+            /></label>
+          </span>
+        </h2>
         <div class="body">
           <div class="preview" id="gen"></div>
           <div class="files" id="files"></div>
         </div>
       </section>
-    </div>
-    <div id="map-modal" hidden>
-      <div class="dlg">
-        <h2>template regions — assign each element a slot</h2>
-        <div id="map-list"></div>
-        <button type="button" id="map-apply" class="primary">apply</button>
-        <button type="button" id="map-close">cancel</button>
-      </div>
     </div>
     <div id="modal" hidden>
       <div class="dlg">
@@ -427,9 +472,14 @@
             `/api/site?name=${encodeURIComponent(name)}`,
           );
           $("config").value = d.config;
-          $("tpl").innerHTML = d.template || "";
+          injectSvg($("tpl"), d.template || "");
+          // Size the stage from the SVG's viewBox immediately — without
+          // this it collapses until template-analyze lands (grid shifts).
+          const tsv = $("tpl").querySelector("svg")?.viewBox?.baseVal;
+          if (tsv?.width > 0 && tsv?.height > 0)
+            $("tpl-stage").style.aspectRatio = `${tsv.width} / ${tsv.height}`;
           $("files").innerHTML = "";
-          syncImgColors();
+          if (draft) closeEditor();
           preview();
           try {
             const a = await j("POST", "/api/template-analyze", d.config);
@@ -457,6 +507,17 @@
         tplBox = null;
       const slotMap = {};
 
+      // Unfilled {{slot}} hrefs would be fetched as relative URLs by the
+      // browser — strip them so the raw template preview doesn't 404.
+      function injectSvg(host, svg) {
+        host.innerHTML = svg;
+        host.querySelectorAll("[href],[xlink\\:href]").forEach((el) => {
+          for (const a of ["href", "xlink:href"]) {
+            if (el.getAttribute(a)?.includes("{{")) el.removeAttribute(a);
+          }
+        });
+      }
+
       function drawRegions() {
         const ov = $("tpl-overlay");
         ov.innerHTML = "";
@@ -468,6 +529,7 @@
         $("tpl-stage").style.aspectRatio = `${vbW} / ${vbH}`;
         for (const e of regions) {
           const d = document.createElement("div");
+          d.dataset.el = e.id;
           const slot = slotMap[e.id];
           d.className = `region${e.tag === "text" ? " txt" : ""}${slot ? " on" : ""}`;
           const x = ((e.x - minX) / vbW) * 100;
@@ -483,14 +545,30 @@
         ov.hidden = !$("show-regions").checked;
       }
       $("show-regions").onchange = drawRegions;
+      const setBackdrop = (css) =>
+        document.querySelectorAll(".preview").forEach((p) => {
+          p.style.background = css;
+        });
+      $("backdrop").onchange = () => {
+        const v = $("backdrop").value;
+        $("bg-color").hidden = v !== "custom";
+        setBackdrop(v === "custom" ? $("bg-color").value : v);
+      };
+      $("bg-color").oninput = () => setBackdrop($("bg-color").value);
 
       let timer;
       function preview() {
         clearTimeout(timer);
         timer = setTimeout(async () => {
           try {
-            const d = await j("POST", "/api/preview", $("config").value);
-            $("gen").innerHTML = d.svg;
+            let body = $("config").value;
+            if (draft) {
+              const o = JSON.parse(body);
+              applyDraft(o);
+              body = JSON.stringify(o);
+            }
+            const d = await j("POST", "/api/preview", body);
+            injectSvg($("gen"), d.svg);
             status("");
           } catch (e) {
             status(e.message, false);
@@ -512,7 +590,206 @@
         preview();
       };
 
-      $("pick-img").onclick = async () => {
+      // -- contextual slot editor ------------------------------------
+      // A click on a template region opens the panel below "generated":
+      // edits go into `draft`, preview renders config+draft, and "apply"
+      // writes the draft into the JSON document (save persists to disk).
+      let draft = null; // {kind:"text"|"image", slot, el, value:{…}}
+
+      const applyDraft = (o) => {
+        const v = draft.value;
+        if (draft.kind === "text") {
+          o.text ||= {};
+          o.text[draft.slot] = v.color
+            ? { text: v.text, color: v.color }
+            : v.text;
+        } else {
+          o.images ||= {};
+          o.images[draft.slot] =
+            v.fill || v.stroke
+              ? {
+                  src: v.src,
+                  ...(v.fill && { fill: v.fill }),
+                  ...(v.stroke && { stroke: v.stroke }),
+                }
+              : v.src;
+        }
+      };
+
+      const closeEditor = () => {
+        draft = null;
+        $("slot-editor").hidden = true;
+        document.querySelectorAll(".region.sel").forEach((r) => {
+          r.classList.remove("sel");
+        });
+        preview();
+      };
+
+      const imgSrc = (cur) => (typeof cur === "string" ? cur : cur?.src || "");
+      const isSvgSrc = (src) =>
+        src.toLowerCase().endsWith(".svg") || src.startsWith("data:image/svg");
+
+      function openEditor(el) {
+        const slot = slotMap[el.id] || el.slot;
+        if (!slot) {
+          status(`${el.id} has no slot — use map template…`, false);
+          return;
+        }
+        let o;
+        try {
+          o = JSON.parse($("config").value);
+        } catch {
+          status("invalid JSON", false);
+          return;
+        }
+        const kind = el.tag === "text" ? "text" : "image";
+        const cur = kind === "text" ? o.text?.[slot] : o.images?.[slot];
+        draft = {
+          kind,
+          slot,
+          el: el.id,
+          value:
+            kind === "text"
+              ? {
+                  text: typeof cur === "string" ? cur : cur?.text || "",
+                  color: typeof cur === "object" && cur ? cur.color || "" : "",
+                }
+              : {
+                  src: imgSrc(cur),
+                  fill: cur?.fill || "",
+                  stroke: cur?.stroke || "",
+                },
+        };
+        draft.orig = { ...draft.value };
+        document.querySelectorAll(".region.sel").forEach((r) => {
+          r.classList.remove("sel");
+        });
+        document
+          .querySelector(`.region[data-el="${el.id}"]`)
+          ?.classList.add("sel");
+        $("se-name").textContent = `${slot} → ${el.id}`;
+        buildSeBody();
+        $("slot-editor").hidden = false;
+      }
+
+      // click a region box (full bbox) or the svg element itself
+      $("tpl-overlay").addEventListener("click", (e) => {
+        const r = e.target.closest(".region");
+        const el = r && regions?.find((x) => x.id === r.dataset.el);
+        if (el) openEditor(el);
+      });
+      $("tpl").addEventListener("click", (e) => {
+        const n = e.target.closest("[id]");
+        const el = n && regions?.find((x) => x.id === n.id);
+        if (el) openEditor(el);
+      });
+
+      const syncApply = () => {
+        $("se-apply").hidden =
+          !draft || JSON.stringify(draft.value) === JSON.stringify(draft.orig);
+      };
+      const changed = () => {
+        syncApply();
+        preview();
+      };
+
+      function buildSeBody() {
+        const b = $("se-body");
+        syncApply();
+        if (draft.kind === "text") {
+          b.innerHTML = `<div>
+              <button type="button" data-smk="b"><b>B</b></button>
+              <button type="button" data-smk="i"><i>I</i></button>
+              <button type="button" data-smk="u"><u>U</u></button>
+              <input type="color" id="se-mk-color" value="#e45842" title="inline color" aria-label="inline color" />
+              <select id="se-mk-font" aria-label="inline font"><option value="">font…</option></select>
+            </div>
+            <label>text <textarea id="se-text" spellcheck="false"></textarea></label>
+            <label>color <input type="color" id="se-color" value="#ffffff" /></label>`;
+          $("se-text").value = draft.value.text;
+          if (draft.value.color) $("se-color").value = draft.value.color;
+          const sw = (pre, post) => {
+            const t = $("se-text");
+            t.setRangeText(
+              pre + t.value.slice(t.selectionStart, t.selectionEnd) + post,
+              t.selectionStart,
+              t.selectionEnd,
+              "select",
+            );
+            draft.value.text = t.value;
+            changed();
+          };
+          b.querySelectorAll("[data-smk]").forEach((btn) => {
+            const marks = { b: ["**", "**"], i: ["*", "*"], u: ["__", "__"] };
+            btn.onclick = () => sw(...marks[btn.dataset.smk]);
+          });
+          $("se-text").oninput = () => {
+            draft.value.text = $("se-text").value;
+            changed();
+          };
+          $("se-color").oninput = () => {
+            draft.value.color = $("se-color").value;
+            changed();
+          };
+          $("se-mk-color").oninput = () =>
+            sw(`[${$("se-mk-color").value}]`, "[/]");
+          $("se-mk-font").innerHTML =
+            `<option value="">font…</option>` +
+            [...new Set(fonts.map((f) => f.family).filter(Boolean))]
+              .sort()
+              .map((f) => `<option>${f}</option>`)
+              .join("");
+          $("se-mk-font").onchange = () => {
+            const fam = $("se-mk-font").value;
+            if (!fam) return;
+            $("se-mk-font").value = "";
+            sw(`[font:${fam}]`, "[/]");
+          };
+        } else {
+          b.innerHTML = `<label>image</label>
+            <div id="se-src"></div>
+            <button type="button" id="se-pick">pick…</button>
+            <span id="se-color-wrap">
+              <label>fill <input type="color" id="se-fill" value="#ffffff" /></label>
+              <label>stroke <input type="color" id="se-stroke" value="#000000" /></label>
+              <button type="button" id="se-reset" title="remove recolor">×</button>
+            </span>`;
+          const sync = () => {
+            $("se-src").textContent = draft.value.src || "(empty)";
+            $("se-color-wrap").hidden = !isSvgSrc(draft.value.src);
+            if (draft.value.fill) $("se-fill").value = draft.value.fill;
+            if (draft.value.stroke) $("se-stroke").value = draft.value.stroke;
+          };
+          sync();
+          $("se-pick").onclick = openPick;
+          $("se-fill").oninput = () => {
+            draft.value.fill = $("se-fill").value;
+            changed();
+          };
+          $("se-stroke").oninput = () => {
+            draft.value.stroke = $("se-stroke").value;
+            changed();
+          };
+          $("se-reset").onclick = () => {
+            draft.value.fill = "";
+            draft.value.stroke = "";
+            sync();
+            changed();
+          };
+        }
+      }
+
+      $("se-apply").onclick = () => {
+        if (!draft) return;
+        patch(applyDraft);
+        draft.orig = { ...draft.value };
+        syncApply();
+        status(`${draft.slot} applied — press save to persist`, true);
+      };
+      $("se-close").onclick = closeEditor;
+
+      // image picker modal — writes into the open draft
+      const openPick = async () => {
         try {
           const d = await j("GET", "/api/images");
           if (!d.images.length) {
@@ -529,12 +806,11 @@
             img.alt = "";
             b.append(img, document.createTextNode(i.name));
             b.onclick = () => {
-              const slot = $("img-slot").value;
-              patch((o) => {
-                o.images ||= {};
-                o.images[slot] = i.path;
-              });
-              syncImgColors();
+              if (draft?.kind === "image") {
+                draft.value.src = i.path;
+                buildSeBody();
+                changed();
+              }
               $("modal").hidden = true;
             };
             $("img-list").append(b);
@@ -546,78 +822,6 @@
       };
       $("modal-close").onclick = () => {
         $("modal").hidden = true;
-      };
-
-      const imgSrc = (cur) => (typeof cur === "string" ? cur : cur?.src || "");
-      const isSvgSrc = (src) =>
-        src.toLowerCase().endsWith(".svg") || src.startsWith("data:image/svg");
-
-      const setImageColor = (key, val) => {
-        const slot = $("img-slot").value;
-        patch((o) => {
-          o.images ||= {};
-          const cur = o.images[slot];
-          const src = imgSrc(cur);
-          if (!isSvgSrc(src)) {
-            status("recolor needs an .svg image", false);
-            return;
-          }
-          const next =
-            typeof cur === "object" && cur ? { ...cur, src } : { src };
-          if (val) next[key] = val;
-          else delete next[key];
-          o.images[slot] = next;
-        });
-      };
-      $("img-color").oninput = () =>
-        setImageColor("fill", $("img-color").value);
-      $("img-stroke").oninput = () =>
-        setImageColor("stroke", $("img-stroke").value);
-      $("img-color-clear").onclick = () =>
-        patch((o) => {
-          const cur = o.images?.[$("img-slot").value];
-          if (typeof cur === "object" && cur)
-            o.images[$("img-slot").value] = cur.src || "";
-        });
-
-      // reflect the slot's current colors/svg-ness in the toolbar
-      const syncImgColors = () => {
-        let src = "";
-        try {
-          const o = JSON.parse($("config").value);
-          const cur = o.images?.[$("img-slot").value];
-          src = imgSrc(cur);
-          if (cur?.fill) $("img-color").value = cur.fill;
-          if (cur?.stroke) $("img-stroke").value = cur.stroke;
-        } catch {
-          /* mid-edit json */
-        }
-        $("img-color-wrap").hidden = !isSvgSrc(src);
-      };
-      $("img-slot").onchange = syncImgColors;
-
-      const wrapSel = (pre, post) => {
-        const t = $("config");
-        const a = t.selectionStart;
-        const b2 = t.selectionEnd;
-        t.setRangeText(pre + t.value.slice(a, b2) + post, a, b2, "select");
-        preview();
-      };
-      document.querySelectorAll("[data-mk]").forEach((btn) => {
-        const marks = { b: ["**", "**"], i: ["*", "*"], u: ["__", "__"] };
-        btn.onclick = () => wrapSel(...marks[btn.dataset.mk]);
-      });
-      $("mk-color").oninput = () => wrapSel(`[${$("mk-color").value}]`, "[/]");
-
-      $("txt-color").oninput = () => {
-        const slot = $("txt-slot").value;
-        const color = $("txt-color").value;
-        patch((o) => {
-          o.text ||= {};
-          const cur = o.text[slot];
-          const text = typeof cur === "string" ? cur : cur?.text || "";
-          o.text[slot] = { text, color };
-        });
       };
 
       async function loadFonts() {

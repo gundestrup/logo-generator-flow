@@ -1,0 +1,15 @@
+// markdownlint config (vscode-markdownlint + markdownlint-cli2).
+// Mirrors the engineering-memory KB house rules — keep rule values in sync.
+{
+  "MD013": {
+    "line_length": 120,
+    "tables": false,
+    "code_blocks": false,
+    "headings": false
+  },
+  // Keep-a-Changelog repeats ### Added/Changed/Fixed under each ## version —
+  // only flag duplicates under the same parent heading.
+  "MD024": { "siblings_only": true },
+  "MD012": { "maximum": 3 },
+  "MD041": false
+}

@@ -19,6 +19,14 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
+func mustMkdir(t *testing.T, path string) {
+	t.Helper()
+	// #nosec G301 -- test fixture dir in a private t.TempDir().
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func writeTestPNG(t *testing.T, path string) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 4, 4))
@@ -253,10 +261,7 @@ func TestRenderSiteSVGOnly(t *testing.T) {
 func TestRenderSiteFakeTools(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin")
-	// #nosec G301 -- test fixture in a private t.TempDir().
-	if err := os.Mkdir(bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, bin)
 	fixture := filepath.Join(dir, "fixture.png")
 	writeTestPNG(t, fixture)
 
@@ -288,10 +293,7 @@ func TestRenderSiteFakeTools(t *testing.T) {
 func TestRenderSiteRemovesIntermediatePNG(t *testing.T) {
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin")
-	// #nosec G301 -- test fixture in a private t.TempDir().
-	if err := os.Mkdir(bin, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, bin)
 	tpl := filepath.Join(dir, "t.svg")
 	writeFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
 	out := filepath.Join(dir, "out", "site")
@@ -424,11 +426,14 @@ func TestRecolorDataURI(t *testing.T) {
 func TestFontFamilyOverride(t *testing.T) {
 	dir := t.TempDir()
 	tpl := filepath.Join(dir, "t.svg")
-	writeFile(t, tpl, `<svg xmlns="http://www.w3.org/2000/svg"><text font-family="Old Font" x="0" y="10">{{text1}}</text></svg>`)
+	writeFile(t, tpl, `<svg xmlns="http://www.w3.org/2000/svg"><style>.a{font-family:&apos;Old Font&apos;,sans-serif}</style><text font-family="Old Font" x="0" y="10">{{text1}}</text><text font-family='Old Font' x="0" y="20">{{text2}}</text></svg>`)
 	cfg := validConfig()
 	cfg.Template = tpl
 	cfg.Render.FontFamily = "New Font"
-	cfg.Text = map[string]TextSlot{"text1": {Value: `plain [font:Keep]styled[/]`}}
+	cfg.Text = map[string]TextSlot{
+		"text1": {Value: `plain [font:Keep]styled[/]`},
+		"text2": {Value: `x`},
+	}
 	out, err := renderTemplate(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -440,10 +445,73 @@ func TestFontFamilyOverride(t *testing.T) {
 	if !strings.Contains(s, `font-family="Keep"`) {
 		t.Fatalf("styled [font:] run must keep its family: %s", s)
 	}
+	if strings.Contains(s, "Old Font") {
+		t.Fatalf("single-quoted + CSS-decl families not overridden: %s", s)
+	}
+	if !strings.Contains(s, `font-family:New Font`) {
+		t.Fatalf("style-block declaration not rewritten: %s", s)
+	}
 	// Unset → template untouched.
 	cfg.Render.FontFamily = ""
 	out, _ = renderTemplate(cfg)
 	if !strings.Contains(string(out), `font-family="Old Font"`) {
 		t.Fatal("template font changed without fontFamily")
+	}
+}
+
+func TestParseColorRejects(t *testing.T) {
+	for _, s := range []string{"", "#12", "#12345", "#1234567", "red", "#gggggg"} {
+		if _, err := parseColor(s); err == nil {
+			t.Errorf("parseColor(%q) should fail", s)
+		}
+	}
+}
+
+func TestToolPathConfiguredMissing(t *testing.T) {
+	if _, err := toolPath(filepath.Join(t.TempDir(), "absent-resvg"), "resvg"); err == nil {
+		t.Fatal("configured missing tool should error")
+	}
+	if _, err := toolPath("no-such-tool-xyzzy", "also-missing-xyzzy"); err == nil {
+		t.Fatal("unresolvable tool should error")
+	}
+}
+
+func TestRunToolFailure(t *testing.T) {
+	fail := filepath.Join(t.TempDir(), "failtool")
+	// #nosec G306 -- fake tool script must be executable.
+	if err := os.WriteFile(fail, []byte("#!/bin/sh\necho oops >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(fail); err == nil || !strings.Contains(err.Error(), "oops") {
+		t.Fatalf("run error = %v, want captured stderr", err)
+	}
+}
+
+func TestRenderSiteToolFailure(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	mustMkdir(t, bin)
+	fixture := filepath.Join(dir, "fixture.png")
+	writeTestPNG(t, fixture)
+	cwebpFail := filepath.Join(bin, "cwebp")
+	// #nosec G306 -- fake tool script must be executable.
+	if err := os.WriteFile(cwebpFail, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tpl := filepath.Join(dir, "t.svg")
+	writeFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
+
+	cfg := Config{
+		Template: tpl,
+		Text:     map[string]TextSlot{"text1": {Value: "x"}},
+		Tools: ToolConfig{
+			Resvg: fakeTool(t, bin, "resvg", fixture),
+			CWebP: cwebpFail,
+		},
+	}
+	applyDefaults(&cfg)
+	cfg.Output.Formats = []string{"svg", "webp"}
+	if err := renderSite(cfg, filepath.Join(dir, "out")); err == nil {
+		t.Fatal("failing cwebp should propagate an error")
 	}
 }

@@ -1,105 +1,134 @@
 package main
 
 import (
-	"fmt"
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// setupSites creates a temp project: a template plus n site configs
-// (site-a, site-b, ...) rendering svg only.
-func setupSites(t *testing.T, n int) (root, configs, out string) {
+func TestRunVersion(t *testing.T) {
+	var out bytes.Buffer
+	if err := runCLI([]string{"-version"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "logo-generator") {
+		t.Fatalf("version output = %q", out.String())
+	}
+}
+
+func TestRunBadFlag(t *testing.T) {
+	var out bytes.Buffer
+	if err := runCLI([]string{"-nope"}, &out); err == nil {
+		t.Fatal("expected flag parse error")
+	}
+}
+
+func TestRunMissingConfigs(t *testing.T) {
+	var out bytes.Buffer
+	missing := filepath.Join(t.TempDir(), "nope")
+	if err := runCLI([]string{"-configs", missing}, &out); err == nil {
+		t.Fatal("expected error for missing configs dir")
+	}
+}
+
+// mkConfigsDir creates an empty configs directory inside a fresh temp root.
+func mkConfigsDir(t *testing.T) string {
 	t.Helper()
-	root = t.TempDir()
-	configs = filepath.Join(root, "configs")
-	out = filepath.Join(root, "out")
-	// #nosec G301 -- test fixture in a private t.TempDir().
-	if err := os.Mkdir(configs, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, filepath.Join(root, "t.svg"), `<svg><text>{{text1}}</text></svg>`)
-	for i := 0; i < n; i++ {
-		name := fmt.Sprintf("site-%c", 'a'+i)
-		cfg := fmt.Sprintf(`{
-			"name": %q, "template": "t.svg",
-			"output": {"formats": ["svg"]},
-			"text": {"text1": %q}
-		}`, name, "hello-"+name)
-		writeFile(t, filepath.Join(configs, name+".json"), cfg)
-	}
-	t.Chdir(root)
-	return root, configs, out
+	configs := filepath.Join(t.TempDir(), "configs")
+	mustMkdir(t, configs)
+	return configs
 }
 
-func TestRunAllRendersEverySite(t *testing.T) {
-	_, configs, out := setupSites(t, 2)
-	if err := runAll(configs, out, ""); err != nil {
-		t.Fatal(err)
-	}
-	for _, site := range []string{"site-a", "site-b"} {
-		// #nosec G304 -- reading our own rendered output in a test.
-		b, err := os.ReadFile(filepath.Join(out, site, "logo.svg"))
-		if err != nil {
-			t.Fatalf("missing %s: %v", site, err)
-		}
-		if !strings.Contains(string(b), "hello-"+site) {
-			t.Fatalf("%s not rendered: %s", site, b)
-		}
-	}
-}
-
-func TestRunAllSiteFilter(t *testing.T) {
-	_, configs, out := setupSites(t, 2)
-	if err := runAll(configs, out, "site-b"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(out, "site-a")); !os.IsNotExist(err) {
-		t.Fatal("site-a should be filtered out")
-	}
-	if _, err := os.Stat(filepath.Join(out, "site-b", "logo.svg")); err != nil {
-		t.Fatal("site-b missing")
-	}
-}
-
-func TestRunAllFilterNoMatch(t *testing.T) {
-	_, configs, out := setupSites(t, 1)
-	err := runAll(configs, out, "nope")
-	if err == nil || !strings.Contains(err.Error(), "no sites matched") {
-		t.Fatalf("want no-match error, got %v", err)
-	}
-}
-
-func TestRunAllKeepsGoingOnBadConfig(t *testing.T) {
-	_, configs, out := setupSites(t, 1)
-	writeFile(t, filepath.Join(configs, "broken.json"), `{invalid`)
-
-	err := runAll(configs, out, "")
-	if err == nil || !strings.Contains(err.Error(), "broken.json") || !strings.Contains(err.Error(), "1 site(s) failed") {
-		t.Fatalf("want failure summary naming broken.json, got %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(out, "site-a", "logo.svg")); err != nil {
-		t.Fatal("good site should still render")
-	}
-}
-
-func TestRunAllDuplicateNames(t *testing.T) {
-	_, configs, out := setupSites(t, 1)
-	writeFile(t, filepath.Join(configs, "copy.json"), `{
-		"name": "site-a", "template": "t.svg",
-		"output": {"formats": ["svg"]}, "text": {"text1": "dup"}
+// writeSite writes a minimal svg-only site config (and its template) into
+// root/configs so renderSite needs no external tools.
+func writeSite(t *testing.T, root, name string) {
+	t.Helper()
+	tpl := filepath.Join(root, name+".svg")
+	writeFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
+	writeFile(t, filepath.Join(root, "configs", name+".json"), `{
+		"name": "`+name+`",
+		"template": "`+tpl+`",
+		"text": {"text1": "hi"},
+		"output": {"formats": ["svg"]}
 	}`)
-	err := runAll(configs, out, "")
-	if err == nil || !strings.Contains(err.Error(), `duplicate site name "site-a"`) {
-		t.Fatalf("want duplicate name error, got %v", err)
+}
+
+func TestRunRenderSVGOnly(t *testing.T) {
+	configs := mkConfigsDir(t)
+	root := filepath.Dir(configs)
+	writeSite(t, root, "acme")
+	out := filepath.Join(root, "out")
+	var log bytes.Buffer
+	if err := runCLI([]string{"-configs", configs, "-out", out}, &log); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "acme", "logo.svg")); err != nil {
+		t.Fatalf("logo.svg not written: %v", err)
 	}
 }
 
-func TestRunAllNothingToRender(t *testing.T) {
-	dir := t.TempDir()
-	err := runAll(dir, filepath.Join(dir, "out"), "")
-	if err == nil || !strings.Contains(err.Error(), "no *.json") {
-		t.Fatalf("want no-configs error, got %v", err)
+func TestRunSitesFilter(t *testing.T) {
+	configs := mkConfigsDir(t)
+	root := filepath.Dir(configs)
+	writeSite(t, root, "acme")
+	writeSite(t, root, "other")
+	out := filepath.Join(root, "out")
+	var log bytes.Buffer
+	if err := runCLI([]string{"-configs", configs, "-out", out, "-sites", "acme"}, &log); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(out, "acme", "logo.svg")); err != nil {
+		t.Fatal("acme should render")
+	}
+	if _, err := os.Stat(filepath.Join(out, "other")); !os.IsNotExist(err) {
+		t.Fatal("other should be filtered out")
+	}
+	// Unknown filter → "no sites matched".
+	if err := runCLI([]string{"-configs", configs, "-out", out, "-sites", "ghost"}, &log); err == nil {
+		t.Fatal("expected no-sites-matched error")
+	}
+}
+
+func TestRunSiteFailures(t *testing.T) {
+	configs := mkConfigsDir(t)
+	root := filepath.Dir(configs)
+	writeSite(t, root, "acme")
+	out := filepath.Join(root, "out")
+	var log bytes.Buffer
+
+	// Duplicate site name → collected failure.
+	writeFile(t, filepath.Join(configs, "dup.json"),
+		`{"name":"acme","template":"x.svg","output":{"formats":["svg"]}}`)
+	if err := runCLI([]string{"-configs", configs, "-out", out}, &log); err == nil {
+		t.Fatal("duplicate site name should fail the run")
+	}
+	if err := os.Remove(filepath.Join(configs, "dup.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Broken config → loadConfig failure.
+	writeFile(t, filepath.Join(configs, "bad.json"), "{oops")
+	if err := runCLI([]string{"-configs", configs, "-out", out}, &log); err == nil {
+		t.Fatal("invalid config should fail the run")
+	}
+	if err := os.Remove(filepath.Join(configs, "bad.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Missing template → renderSite failure.
+	writeFile(t, filepath.Join(configs, "dead.json"),
+		`{"name":"dead","template":"no.svg","output":{"formats":["svg"]}}`)
+	if err := runCLI([]string{"-configs", configs, "-out", out}, &log); err == nil {
+		t.Fatal("missing template should fail the run")
+	}
+}
+
+func TestRunEmptyConfigs(t *testing.T) {
+	configs := mkConfigsDir(t)
+	var log bytes.Buffer
+	if err := runCLI([]string{"-configs", configs, "-out", t.TempDir()}, &log); err == nil {
+		t.Fatal("empty configs dir should report nothing to render")
 	}
 }

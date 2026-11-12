@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -25,14 +26,8 @@ func newEditTestHandler(t *testing.T) *editHandler {
 	t.Helper()
 	root := t.TempDir()
 	configs := filepath.Join(root, "configs")
-	// #nosec G301 -- test fixture dir
-	if err := os.MkdirAll(filepath.Join(root, "templates"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	// #nosec G301 -- test fixture dir
-	if err := os.MkdirAll(configs, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, filepath.Join(root, "templates"))
+	mustMkdir(t, configs)
 	// #nosec G306 -- test fixture file
 	if err := os.WriteFile(filepath.Join(configs, "acme.json"), []byte(editTestConfig), 0o644); err != nil {
 		t.Fatal(err)
@@ -159,9 +154,7 @@ func TestEditRenderAll(t *testing.T) {
 func TestOutputFile(t *testing.T) {
 	h := newEditTestHandler(t)
 	// #nosec G301 -- test fixture in a private t.TempDir().
-	if err := os.MkdirAll(filepath.Join(h.outDir, "acme"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, filepath.Join(h.outDir, "acme"))
 	// #nosec G306 -- test fixture in a private t.TempDir().
 	if err := os.WriteFile(filepath.Join(h.outDir, "acme", "logo.svg"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -177,9 +170,7 @@ func TestOutputFile(t *testing.T) {
 func TestEditAssets(t *testing.T) {
 	h := newEditTestHandler(t)
 	// #nosec G301 -- test fixture dir
-	if err := os.MkdirAll("assets/images", 0o755); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, "assets/images")
 	// #nosec G306 -- test fixture file
 	if err := os.WriteFile("assets/images/badge.svg", []byte("<svg/>"), 0o644); err != nil {
 		t.Fatal(err)
@@ -474,11 +465,12 @@ func TestFontFamilyName(t *testing.T) {
 }
 
 func TestPreviewFontFaces(t *testing.T) {
+	h := &editHandler{configsPath: t.TempDir(), outDir: t.TempDir()}
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><text>hi</text></svg>`
 	cfg := Config{}
 	cfg.Render.FontFamily = "Fam"
 	cfg.Render.FontFiles = []string{"assets/fonts/x.ttf"}
-	out := injectFontFaces(svg, cfg)
+	out := h.injectFontFaces(svg, cfg)
 	if !strings.Contains(out, `<style>@font-face`) || !strings.Contains(out, `/asset/fonts/x.ttf`) {
 		t.Fatalf("missing @font-face: %s", out)
 	}
@@ -487,11 +479,196 @@ func TestPreviewFontFaces(t *testing.T) {
 	}
 	// Fonts outside assets/fonts are not servable → skipped.
 	cfg.Render.FontFiles = []string{"/elsewhere/x.ttf"}
-	if out := injectFontFaces(svg, cfg); strings.Contains(out, "@font-face") {
+	if out := h.injectFontFaces(svg, cfg); strings.Contains(out, "@font-face") {
 		t.Fatalf("outside font should be skipped: %s", out)
 	}
 	// Self-closing <svg/> must not be modified.
-	if out := injectFontFaces(`<svg xmlns="http://www.w3.org/2000/svg"/>`, cfg); strings.Contains(out, "<style>") {
+	if out := h.injectFontFaces(`<svg xmlns="http://www.w3.org/2000/svg"/>`, cfg); strings.Contains(out, "<style>") {
 		t.Fatalf("self-closing svg modified: %s", out)
+	}
+}
+
+func TestFontIndexAndMarkupFaces(t *testing.T) {
+	dir := t.TempDir()
+	makeTestFont(t, dir, "mark.ttf", "MarkFam")
+	h := &editHandler{configsPath: t.TempDir(), outDir: t.TempDir(), fontsDir: dir}
+	idx := h.fontIndex(dir)
+	if idx["MarkFam"] == "" {
+		t.Fatalf("fontIndex missing MarkFam: %v", idx)
+	}
+	// A font-family used by the SVG (e.g. a [font:] run or template text)
+	// resolves through the index into an @font-face rule.
+	svg := `<svg xmlns="http://www.w3.org/2000/svg"><tspan font-family="MarkFam">x</tspan></svg>`
+	out := h.injectFontFaces(svg, Config{})
+	if !strings.Contains(out, `font-family:'MarkFam'`) || !strings.Contains(out, `/asset/fonts/mark.ttf`) {
+		t.Fatalf("index font not injected: %s", out)
+	}
+	// Comma fallback lists try each candidate.
+	svg = `<svg xmlns="http://www.w3.org/2000/svg"><tspan font-family="Nope, MarkFam, sans">x</tspan></svg>`
+	if out := h.injectFontFaces(svg, Config{}); !strings.Contains(out, `'MarkFam'`) {
+		t.Fatalf("fallback family not resolved: %s", out)
+	}
+}
+
+func TestServeEditEndToEnd(t *testing.T) {
+	root := t.TempDir()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- serveEdit(root, root, addr) }()
+
+	// Poll ping until the server is up.
+	var ping []byte
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get("http://" + addr + "/api/ping") // #nosec G107 -- loopback test
+		if err == nil {
+			ping, _ = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !strings.Contains(string(ping), `"app":"logo-generator"`) {
+		t.Fatalf("server never came up; ping = %s", ping)
+	}
+	resp, err := http.Post("http://"+addr+"/api/shutdown", "", nil) // #nosec G107 -- loopback test
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("serveEdit: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("shutdown did not return")
+	}
+}
+
+func TestEditShutdownEndpoint(t *testing.T) {
+	called := make(chan struct{}, 1)
+	h := newEditTestHandler(t)
+	mux := editMux(h, func() { called <- struct{}{} })
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/shutdown", nil))
+	if w.Code != 200 {
+		t.Fatalf("status %d", w.Code)
+	}
+	select {
+	case <-called:
+	case <-time.After(time.Second):
+		t.Fatal("shutdown callback not invoked")
+	}
+}
+
+func TestEditMethodNotAllowed(t *testing.T) {
+	h := newEditTestHandler(t)
+	if w := doEdit(h, "POST", "/api/sites", "{}"); w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status %d", w.Code)
+	}
+}
+
+func TestEditSitesMissingDir(t *testing.T) {
+	h := &editHandler{configsPath: filepath.Join(t.TempDir(), "missing")}
+	if w := doEdit(h, "GET", "/api/sites", ""); w.Code == 200 {
+		t.Fatal("missing configs dir should fail")
+	}
+}
+
+func TestEditSiteErrors(t *testing.T) {
+	h := newEditTestHandler(t)
+	for _, target := range []string{"/api/site", "/api/site?name=../x", "/api/site?name=ghost"} {
+		if w := doEdit(h, "GET", target, ""); w.Code == 200 {
+			t.Fatalf("%s: expected error status", target)
+		}
+	}
+}
+
+func TestEditBadBodies(t *testing.T) {
+	h := newEditTestHandler(t)
+	for _, target := range []string{"/api/preview", "/api/render", "/api/template-analyze", "/api/template-fill"} {
+		if w := doEdit(h, "POST", target, "{oops"); w.Code == 200 {
+			t.Fatalf("%s: bad JSON should fail", target)
+		}
+	}
+}
+
+func TestEditSaveErrors(t *testing.T) {
+	h := newEditTestHandler(t)
+	if w := doEdit(h, "POST", "/api/save", "{}"); w.Code == 200 {
+		t.Fatal("missing name should fail")
+	}
+	if w := doEdit(h, "POST", "/api/save?name=acme", "{oops"); w.Code == 200 {
+		t.Fatal("bad JSON should fail")
+	}
+}
+
+func TestEditRenderAllMissingTools(t *testing.T) {
+	h := newEditTestHandler(t)
+	t.Setenv("PATH", t.TempDir()) // no resvg/cwebp/avifenc on PATH
+	cfg := `{"name":"acme","template":"templates/logo.svg","output":{"formats":["svg","png"]}}`
+	if w := doEdit(h, "POST", "/api/render", cfg); w.Code == 200 {
+		t.Fatal("missing tools should fail at preflight")
+	}
+}
+
+func TestAssetFileGuardsAndCache(t *testing.T) {
+	h := newEditTestHandler(t)
+	mustMkdir(t, filepath.Join("assets", "images"))
+	writeFile(t, filepath.Join("assets", "images", "mark.png"), "x")
+	w := doEdit(h, "GET", "/asset/images/mark.png", "")
+	if w.Code != 200 {
+		t.Fatalf("status %d", w.Code)
+	}
+	if got := w.Header().Get("Cache-Control"); !strings.Contains(got, "max-age=300") {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+	for _, target := range []string{"/asset/nope/x.png", "/asset/images/../../etc/passwd"} {
+		if w := doEdit(h, "GET", target, ""); w.Code == 200 {
+			t.Fatalf("%s should not be served", target)
+		}
+	}
+}
+
+func TestNameString(t *testing.T) {
+	cases := []struct {
+		platform []byte
+		raw      []byte
+		want     string
+	}{
+		{[]byte{0, 3}, []byte{0, 'A'}, "A"},  // Windows UTF-16BE
+		{[]byte{0, 0}, []byte{0, 'B'}, "B"},  // Unicode UTF-16BE
+		{[]byte{0, 1}, []byte("mac"), "mac"}, // Macintosh ASCII
+		{[]byte{0, 2}, []byte("x"), ""},      // unknown platform
+	}
+	for _, c := range cases {
+		if got := nameString(c.platform, c.raw); got != c.want {
+			t.Errorf("nameString(%v) = %q, want %q", c.platform, got, c.want)
+		}
+	}
+}
+
+func TestCSSSafe(t *testing.T) {
+	if got := cssSafe(`a'b;c{d}\e`); got != "abcde" {
+		t.Fatalf("cssSafe = %q", got)
+	}
+}
+
+func TestFontFamilyNameNonFont(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "n.txt")
+	writeFile(t, bad, "not a font")
+	if got := fontFamilyName(bad); got != "" {
+		t.Fatalf("non-font family = %q", got)
+	}
+	if got := fontFamilyName(filepath.Join(t.TempDir(), "missing.ttf")); got != "" {
+		t.Fatal("missing file should give empty family")
 	}
 }

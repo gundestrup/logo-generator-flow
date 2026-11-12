@@ -82,9 +82,7 @@ func TestConfigFiles(t *testing.T) {
 		}
 	}
 	// #nosec G301 -- test fixture in a private t.TempDir().
-	if err := os.Mkdir(filepath.Join(dir, "sub.json"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, filepath.Join(dir, "sub.json"))
 
 	files, err := configFiles(dir)
 	if err != nil {
@@ -159,9 +157,7 @@ func TestApplyDefaultsFontsDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	// #nosec G301 -- test fixture in a private t.TempDir().
-	if err := os.MkdirAll("assets/fonts", 0o755); err != nil {
-		t.Fatal(err)
-	}
+	mustMkdir(t, "assets/fonts")
 	var c Config
 	applyDefaults(&c)
 	if c.Render.FontsDir != "assets/fonts" {
@@ -203,6 +199,32 @@ func TestImageSlotUnmarshal(t *testing.T) {
 	for _, bad := range []string{`123`, `{"src":5}`, `{"nope":1}`, `[1]`} {
 		if err := json.Unmarshal([]byte(bad), &s); err == nil {
 			t.Errorf("input %s should be rejected", bad)
+		}
+	}
+}
+
+func TestValidateSlots(t *testing.T) {
+	cases := []struct {
+		name    string
+		text    map[string]TextSlot
+		images  map[string]ImageSlot
+		wantErr bool
+	}{
+		{"bad text key", map[string]TextSlot{"text9": {}}, nil, true},
+		{"bad text color", map[string]TextSlot{"text1": {Color: "zzz"}}, nil, true},
+		{"bad image key", nil, map[string]ImageSlot{"image9": {}}, true},
+		{"bad image fill", nil, map[string]ImageSlot{"image1": {Src: "a.svg", Fill: "zzz"}}, true},
+		{"bad image stroke", nil, map[string]ImageSlot{"image1": {Src: "a.svg", Stroke: "zzz"}}, true},
+		{"recolor non-svg", nil, map[string]ImageSlot{"image1": {Src: "a.png", Fill: "#ffffff"}}, true},
+		{"svg recolor ok", nil, map[string]ImageSlot{"image1": {Src: "a.svg", Fill: "#ffffff", Stroke: "#000000"}}, false},
+		{"all empty", nil, nil, false},
+	}
+	for _, c := range cases {
+		cfg := validConfig()
+		cfg.Text, cfg.Images = c.text, c.images
+		err := validateSlots(cfg)
+		if (err != nil) != c.wantErr {
+			t.Errorf("%s: err = %v, wantErr %v", c.name, err, c.wantErr)
 		}
 	}
 }

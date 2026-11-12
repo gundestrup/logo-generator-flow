@@ -114,10 +114,13 @@ func renderTemplate(c Config) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read template: %w", err)
 	}
-	// fontFamily overrides the template's declared fonts (styled [font:…]
-	// runs are emitted later, during substitution, and keep their own).
+	// fontFamily overrides the template's declared fonts — presentation
+	// attributes (either quote style) and CSS font-family: declarations in
+	// <style> blocks. Styled [font:…] runs are emitted later, during
+	// substitution, and keep their own.
 	if c.Render.FontFamily != "" {
 		b = fontFamilyAttr.ReplaceAll(b, []byte(`font-family="`+c.Render.FontFamily+`"`))
+		b = fontFamilyDecl.ReplaceAll(b, []byte(`font-family:`+c.Render.FontFamily))
 	}
 	vals := map[string]string{}
 	for k, v := range c.Text {
@@ -209,7 +212,8 @@ const emptyImageURI = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy5
 var (
 	svgFillAttr    = regexp.MustCompile(`fill="([^"]*)"`)
 	svgStrokeAttr  = regexp.MustCompile(`stroke="([^"]*)"`)
-	fontFamilyAttr = regexp.MustCompile(`font-family="[^"]*"`)
+	fontFamilyAttr = regexp.MustCompile(`font-family="[^"]*"|font-family='[^']*'`)
+	fontFamilyDecl = regexp.MustCompile(`font-family\s*:\s*((?:&[#a-zA-Z0-9]+;|[^;}])*)`)
 )
 
 // recolorSVG rewrites fill/stroke attribute values (keeping "none"); a fill

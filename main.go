@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,31 +18,33 @@ import (
 var version = "dev"
 
 func main() {
-	configsPath := flag.String("configs", "configs", "config file or directory of *.json site configs")
-	outDir := flag.String("out", "output", "output root directory")
-	sitesFlag := flag.String("sites", "", "comma-separated site names to render (default: all)")
-	versionFlag := flag.Bool("version", false, "print version and exit")
-	editFlag := flag.Bool("edit", false, "start the browser editor (alias for -ui)")
-	uiFlag := flag.Bool("ui", false, "start the browser UI on http://127.0.0.1:8181/")
-	flag.Parse()
-
-	if *versionFlag {
-		fmt.Println("logo-generator", version)
-		return
-	}
-
-	if *editFlag || *uiFlag {
-		if err := serveEdit(*configsPath, *outDir); err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	if err := runAll(*configsPath, *outDir, *sitesFlag); err != nil {
+	if err := runCLI(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+func runCLI(argv []string, out io.Writer) error {
+	fs := flag.NewFlagSet("logo-generator", flag.ContinueOnError)
+	fs.SetOutput(io.Discard) // caller reports the parse error
+	configsPath := fs.String("configs", "configs", "config file or directory of *.json site configs")
+	outDir := fs.String("out", "output", "output root directory")
+	sitesFlag := fs.String("sites", "", "comma-separated site names to render (default: all)")
+	versionFlag := fs.Bool("version", false, "print version and exit")
+	editFlag := fs.Bool("edit", false, "start the browser editor (alias for -ui)")
+	uiFlag := fs.Bool("ui", false, "start the browser UI on http://127.0.0.1:8181/")
+	if err := fs.Parse(argv); err != nil {
+		return err
+	}
+
+	if *versionFlag {
+		_, _ = fmt.Fprintln(out, "logo-generator", version)
+		return nil
+	}
+	if *editFlag || *uiFlag {
+		return serveEdit(*configsPath, *outDir, "127.0.0.1:8181")
+	}
+	return runAll(*configsPath, *outDir, *sitesFlag)
 }
 
 func runAll(configsPath, outDir, sitesFlag string) error {

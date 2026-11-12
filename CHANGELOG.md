@@ -16,27 +16,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   insert `assets/images/*` into `image1-4` (with an svg fill-recolor
   option, separate fill + stroke pickers), pick `assets/fonts/*` into `render.fontFiles`/`fontFamily`,
   and set per-slot text colors.
-- Font picker now works end-to-end: `/api/fonts` reports each font's real
+- Font picker works end-to-end: `/api/fonts` reports each font's real
   family name (parsed from the sfnt name table), `render.fontFamily`
-  overrides the template's `font-family` attributes (`[font:…]` markup
-  still wins locally), and the preview injects `@font-face` for the
-  configured files so custom fonts render in the browser too.
+  overrides the template's `font-family` declarations — presentation
+  attributes in either quote style and CSS `font-family:` rules in
+  `<style>` blocks, including entity-escaped quotes (`&apos;`) —
+  (`[font:…]` markup still wins locally), and the preview injects
+  `@font-face` for every family the SVG references so custom fonts
+  render in the browser too.
+- Contextual slot editor: clicking a template region opens an `edit`
+  panel with only the relevant controls — text slots get a markup
+  toolbar (B/I/U/inline color/per-run font), content field, and slot
+  color; image slots get `pick…`, svg fill + stroke, and a reset.
+  Changes preview live through a draft state; **apply** (shown only when
+  the draft differs) merges into the JSON, and **save** persists.
+- Preview backdrop selector in the generated headline
+  (checker/white/black/dark/custom) — CSS-only, never touches the
+  rendered output.
+- `GET /api/ping` + `POST /api/shutdown`: `-ui` self-heals `EADDRINUSE`
+  by gracefully stopping a previous logo-generator instance on the port.
+- `scripts/check-dom-refs.mjs`: cross-references every literal
+  `$("id")`/`getElementById`/`querySelector("#id")` in the HTML files
+  against defined ids — runs in `npm run check`.
+- Fuzz targets for `styledText`, `parseColor`, slot unmarshalling, and
+  `recolorSVG`; opt-in `//go:build integration` test renders through
+  real resvg/cwebp/avifenc.
 - Template mapping flow: `POST /api/template-analyze` lists `id`'d
   elements with bounding boxes; `POST /api/template-fill` rewrites a
   template into `{{slot}}` form — figure boxes become `<image>` elements
   at the box geometry (`preserveAspectRatio="xMidYMid meet"`), text
   elements distribute assigned slots across their tspans. Editor gains a
-  "map template…" modal; slots extended to `text1-6`/`image1-6`;
-  `templates/borg-collective.svg` + `configs/borg.json` added.
+  "map template…" regions card; slots extended to `text1-6`/`image1-6`.
 - Inline text markup — `**bold**`, `*italic*`, `__underline__`,
   `[#hex]…[/]`, `[font:…]…[/]`, `[size:…]…[/]` — renders as styled
-  `<tspan>` runs; editor config pane gains a mini toolbar (B/I/U/color)
-  that wraps the textarea selection.
+  `<tspan>` runs; a mini toolbar wraps the field selection.
 - Slot object forms: `textN` may be `{"text": "...", "color": "#rrggbb"}`
   (renders via `<tspan fill>`), and `imageN` may be
   `{"src": "...", "fill": "#hex", "stroke": "#hex"}` — fill/stroke
   recolor `.svg` sources only, rewriting attributes and keeping
   `fill="none"`.
+- `README.todo.vectorcraft`: full analysis of the `.vectorcraft` format
+  and an implementation plan for accepting it as a template source
+  (vectorcraft-cli export → existing `templateFill` slot injection);
+  `README.todo.*` convention documented in `AGENTS.md` alongside a new
+  working-agreement section (docs-with-changes, tests for new code,
+  changelog entries) and MCP server guidance (`knowledge-base`, `wvf` —
+  incl. `wvf scan` on local demo/editor pages for HTML analysis and bug
+  finding).
+
+### Changed
+
+- Go 1.27.4 (fixes `GO-2026-6859`); CI image digest bumped
+  (`golang:1.27.4-trixie`).
+- Editor layout is three columns: global settings / edit / config ·
+  template + regions card · generated. `map template…` + `outlines`
+  moved into the template headline, backdrop into the generated
+  headline; the config card is raw JSON only.
+- Editor tests drive the real route table via `editMux` + `ServeHTTP`
+  (coverage ~83%); a11y labels added to unlabeled inputs.
+
+### Fixed
+
+- Missing `mk-tools` markup crashed script evaluation on load
+  (`Cannot set properties of null`) leaving the site dropdown empty.
+- `styledText` passed XML-invalid control bytes through — `xmlSafe`
+  strips runes XML 1.0 forbids.
+- `fontFamily` had no effect on templates declaring fonts via `<style>`
+  CSS rules (the common Illustrator/Inkscape export form).
 
 ## [0.1.1] - 2026-11-11
 

@@ -2,11 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <title>logo-generator — pipeline demo</title>
     <style>
       body {
         font-family: system-ui, sans-serif;
         margin: 0;
-        padding: 16px 28px;
+        padding: 12px 24px;
         background: #0b1220;
         color: #dbe4f3;
       }
@@ -28,18 +29,18 @@
         background: #131c2e;
         border: 1px solid #24334f;
         border-radius: 10px;
-        padding: 8px 14px;
-        margin-bottom: 8px;
+        padding: 6px 12px;
+        margin-bottom: 6px;
       }
       .term {
         font:
-          11.5px/1.55 ui-monospace,
+          10.5px/1.4 ui-monospace,
           Menlo,
           monospace;
         background: #0a0f1a;
         border: 1px solid #24334f;
         border-radius: 8px;
-        padding: 8px 12px;
+        padding: 6px 10px;
         white-space: pre;
         color: #c9d6ea;
       }
@@ -59,7 +60,7 @@
         background: #0a0f1a;
         border: 1px solid #24334f;
         border-radius: 8px;
-        padding: 7px 9px;
+        padding: 5px 8px;
         min-width: 0;
       }
       .mini b {
@@ -67,7 +68,7 @@
         font-size: 10px;
         color: #8ba0c2;
         font-weight: 600;
-        margin-bottom: 5px;
+        margin-bottom: 3px;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -75,7 +76,7 @@
       .mini code {
         display: block;
         font:
-          9.5px/1.45 ui-monospace,
+          9px/1.35 ui-monospace,
           monospace;
         color: #c4b5fd;
         white-space: pre-wrap;
@@ -83,7 +84,7 @@
       }
       .mini img {
         width: 100%;
-        height: 78px;
+        height: 58px;
         object-fit: contain;
         background: #0f1830;
         border-radius: 5px;
@@ -132,16 +133,33 @@
           monospace;
         color: #38bdf8;
       }
-      .panes {
+      .cols {
         display: flex;
-        gap: 8px;
-        padding: 7px;
+        gap: 6px;
+        padding: 6px;
       }
-      .panes .mini {
-        height: 78px;
+      .col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
       }
-      .panes .mini img {
-        height: 46px;
+      .cols .mini {
+        padding: 4px 7px;
+      }
+      .cols .mini img {
+        height: 40px;
+      }
+      .cols .mini .btn {
+        display: inline-block;
+        border: 1px solid #24334f;
+        border-radius: 4px;
+        padding: 0 4px;
+        color: #38bdf8;
+        font:
+          8.5px ui-monospace,
+          monospace;
       }
       .tag {
         position: absolute;
@@ -213,20 +231,45 @@
     </section>
 
     <section class="s3">
-      <span class="tag">GUI</span>
+      <span class="tag">editor · -ui</span>
       <div class="browser">
         <div class="bar">
-          <i></i><i></i><i></i><span class="url">localhost:8080/demo/</span>
+          <i></i><i></i><i></i><span class="url">127.0.0.1:8181</span>
         </div>
-        <div class="panes">
-          <div class="mini">
-            <b>1 · config</b><code>{"name":"acme", "text1":"Acme Corp"}</code>
+        <div class="cols">
+          <div class="col">
+            <div class="mini">
+              <b>global settings</b><code>font: Protomolecule</code>
+            </div>
+            <div class="mini">
+              <b>edit · text1 → Title</b
+              ><code
+                ><span class="btn">B</span> <span class="btn">i</span>
+                <span class="btn">u</span> <span class="btn">font…</span><br />
+                "Acme [font:X]Corp[/]"</code
+              >
+            </div>
+            <div class="mini">
+              <b>config</b><code>{"name":"acme", "text1":"…"}</code>
+            </div>
           </div>
-          <div class="mini">
-            <b>2 · template</b><img src="../../templates/logo.svg" alt="" />
+          <div class="col">
+            <div class="mini">
+              <b>template · map… outlines</b
+              ><img src="../../templates/logo.svg" alt="" />
+            </div>
+            <div class="mini">
+              <b>template regions</b><code>Title → text1 · Mark → image1</code>
+            </div>
           </div>
-          <div class="mini">
-            <b>3 · generated</b><img src="../../output/acme/logo.png" alt="" />
+          <div class="col">
+            <div class="mini">
+              <b>generated · backdrop</b
+              ><img src="../../output/acme/logo.png" alt="" />
+            </div>
+            <div class="mini">
+              <b>click region → draft → apply → save</b>
+            </div>
           </div>
         </div>
       </div>
