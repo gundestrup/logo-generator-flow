@@ -562,7 +562,7 @@ func (h *handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, fmt.Errorf("duplicate would be invalid: %w", err))
 		return
 	}
-	if err := os.WriteFile(dst, body, 0o644); err != nil { // #nosec G306 -- site configs are committed files, not secrets
+	if err := os.WriteFile(dst, body, 0o644); err != nil { // #nosec G306 G703 -- `to` is regex-validated via configPath and dst joins configsPath; site configs are committed files, not secrets
 		jsonErr(w, err)
 		return
 	}

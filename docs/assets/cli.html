@@ -131,7 +131,7 @@
       for (const [txt, cls] of out1.slice(0, n1))
         h += `\n<span class="${cls}">${txt}</span>`;
       if (c2 > 0) {
-        h += "\n" + prompt() + cmd2.slice(0, c2);
+        h += `\n${prompt()}${cmd2.slice(0, c2)}`;
         if (n2 === 0) h += `<span class="cur"></span>`;
       }
       if (n2 > 0)

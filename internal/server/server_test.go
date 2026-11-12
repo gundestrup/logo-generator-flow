@@ -73,6 +73,7 @@ func TestEditSitesNameField(t *testing.T) {
 	h := newEditTestHandler(t)
 	// file name and config name may differ — the dropdown shows "name".
 	other := strings.ReplaceAll(editTestConfig, `"name": "acme"`, `"name": "Display Name"`)
+	// #nosec G306 -- test fixture file
 	if err := os.WriteFile(filepath.Join(h.configsPath, "odd-file.json"), []byte(other), 0o644); err != nil {
 		t.Fatal(err)
 	}
