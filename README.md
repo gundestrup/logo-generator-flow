@@ -14,7 +14,7 @@
 
 [ci-badge]: https://github.com/gundestrup/logo-generator-flow/actions/workflows/ci.yml/badge.svg
 [ci-workflow]: https://github.com/gundestrup/logo-generator-flow/actions/workflows/ci.yml
-[version-badge]: https://img.shields.io/badge/version-0.1.1-blue.svg
+[version-badge]: https://img.shields.io/badge/version-0.2.0-blue.svg
 [changelog]: CHANGELOG.md
 
 CLI that renders per-site SVG logos from a shared `{{placeholder}}` template and
@@ -56,7 +56,7 @@ installed.
 ## Usage
 
 ```bash
-go build -o logo-generator .
+go build -o logo-generator ./cmd/logo-generator
 ./logo-generator                        # renders every configs/*.json
 ./logo-generator -configs configs       # same
 ./logo-generator -configs site.json     # single config file
@@ -188,7 +188,8 @@ make edit   # ./logo-generator -ui (or -edit) → http://127.0.0.1:8181/
 ```
 
 The editor is a loopback-only UI in three columns — **global settings /
-edit / config** · **template** (+ regions card) · **generated** — where
+config** · **template** (+ region outlines, map template…, and the
+contextual **edit** card pinned below it) · **generated** — where
 you can edit a site's JSON, watch the SVG re-render live, run
 **render all formats** to write `output/<name>/logo.*`, and **save** the
 config back to `configs/<name>.json`. No rasters are produced while
@@ -201,8 +202,8 @@ family names — sets `render.fontFiles` + `render.fontFamily`).
 custom) that only changes the CSS behind the preview, never the output.
 
 Clicking a region in the template pane opens the contextual **edit**
-panel: text slots get a markup toolbar (B/I/U, inline color, per-run
-font), a content field, and a slot color; image slots get **pick…**
+card below it: text slots get a markup toolbar (B/I/U, inline color,
+per-run font, and size), a content field, and a slot color; image slots get **pick…**
 (thumbnail popup of `assets/images/`), svg fill + stroke, and a × reset.
 Edits flow into a draft and re-render the generated preview immediately;
 **apply** (visible only when something changed) merges the draft into
