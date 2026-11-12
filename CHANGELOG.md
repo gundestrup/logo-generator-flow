@@ -66,6 +66,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Source layout is `cmd/logo-generator` + `internal/{cli,config,render,server,testutil}`
+  (house convention): thin `main`, `cli.Run` orchestrates, the editor
+  server and its embedded UI live in `internal/server`.
+- Editor UI rewritten on vendored **Bulma** (`1.0.4`) + **alpine-csp**
+  (`3.17.5`) under `internal/server/static/vendor/` — declarative
+  `x-model`/`x-show`/`x-for` bindings with the imperative logic in an
+  `Alpine.data` component (`static/app.js`). No CDN, no build step;
+  `scripts/vendor-ui.sh` refreshes the vendored files from pinned
+  `devDependencies`.
+- `POST /api/render` streams Server-Sent Events when the client sends
+  `Accept: text/event-stream` — one `{"file":…}` frame per written file
+  plus a final `{"done":true,"files":[…]}`; plain JSON response is kept
+  for other clients. `render.Site` gained an optional progress callback.
 - Go 1.27.4 (fixes `GO-2026-6859`); CI image digest bumped
   (`golang:1.27.4-trixie`).
 - Editor layout is three columns: global settings / edit / config ·

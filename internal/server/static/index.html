@@ -7,6 +7,8 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%230b1220'/%3E%3Cpath d='M4 8h8M8 4v8' stroke='%2338bdf8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"
     />
+    <link rel="stylesheet" href="/static/vendor/bulma.min.css" />
+    <script src="/static/vendor/alpine-csp.min.js" defer></script>
     <title>logo-generator — editor</title>
     <style>
       :root {
@@ -16,6 +18,13 @@
         --text: #dbe4f3;
         --dim: #8ba0c2;
         --accent: #38bdf8;
+        --bulma-scheme-h: 222;
+        --bulma-scheme-s: 40%;
+        --bulma-scheme-l: 10%;
+        --bulma-text-l: 85%;
+      }
+      [x-cloak] {
+        display: none !important;
       }
       * {
         box-sizing: border-box;
@@ -45,37 +54,37 @@
       h1 span {
         color: var(--accent);
       }
-      select,
-      button {
+      .select select,
+      .button,
+      .input,
+      .textarea,
+      input[type="color"] {
         background: var(--panel);
         color: var(--text);
         border: 1px solid var(--border);
         border-radius: 6px;
-        padding: 6px 10px;
         font: inherit;
-        cursor: pointer;
       }
-      button.primary {
+      .select select option {
+        background: var(--panel);
+      }
+      .button.is-primary {
         background: var(--accent);
         color: #04121f;
         font-weight: 700;
         border: none;
       }
-      .grid {
-        display: grid;
-        grid-template-columns: minmax(320px, 1fr) 1fr 1fr;
-        gap: 12px;
+      .columns {
         height: calc(100vh - 90px);
       }
-      .col {
+      .column {
         display: flex;
         flex-direction: column;
         gap: 12px;
         min-height: 0;
       }
       @media (max-width: 1100px) {
-        .grid {
-          grid-template-columns: 1fr;
+        .columns {
           height: auto;
         }
       }
@@ -87,7 +96,7 @@
         flex-direction: column;
         overflow: hidden;
       }
-      .card h2 {
+      .card .h2 {
         margin: 0;
         padding: 8px 12px;
         font-size: 12px;
@@ -102,12 +111,7 @@
         flex: 1;
         overflow: auto;
       }
-      .col .card {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-      }
-      .col .card:last-child {
+      .column .card:last-child {
         flex: 1;
       }
       #tpl-card {
@@ -117,19 +121,13 @@
         flex: 0 1 auto;
         max-height: 60%;
       }
-      .col .card .body {
-        overflow: auto;
-      }
-      textarea {
+      .textarea {
         width: 100%;
         height: 100%;
         min-height: 300px;
         resize: none;
         background: #0a0f1a;
         color: #c9d6ea;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 10px;
         font:
           12px/1.5 ui-monospace,
           Menlo,
@@ -152,21 +150,10 @@
         font-size: 12px;
         min-height: 1.6em;
       }
-      .tools {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-bottom: 14px;
-        flex-wrap: wrap;
-        color: var(--dim);
-      }
       input[type="color"] {
         width: 34px;
         height: 26px;
         padding: 0;
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        background: var(--panel);
         cursor: pointer;
       }
       #modal {
@@ -176,9 +163,6 @@
         display: grid;
         place-items: center;
         z-index: 10;
-      }
-      #modal[hidden] {
-        display: none;
       }
       .dlg {
         background: var(--panel);
@@ -210,11 +194,7 @@
       }
       .map-row code {
         color: var(--accent);
-        min-width: 110px;
-      }
-      .map-row .dim {
-        color: var(--dim);
-        min-width: 130px;
+        min-width: 60px;
       }
       #tpl-stage {
         position: relative;
@@ -248,8 +228,7 @@
         border-style: solid;
         background: rgba(52, 211, 153, 0.08);
       }
-      #slot-editor textarea {
-        width: 100%;
+      #slot-editor .textarea {
         min-height: 60px;
       }
       #se-body label {
@@ -281,10 +260,14 @@
         font-weight: 400;
         text-transform: none;
         letter-spacing: 0;
+        display: flex;
+        gap: 8px;
+        align-items: center;
       }
-      .h2-tools button {
+      .h2-tools .button {
         padding: 1px 8px;
         font-size: 12px;
+        height: auto;
       }
       .h2-tools input[type="color"] {
         width: 26px;
@@ -313,682 +296,328 @@
       }
     </style>
   </head>
-  <body>
+  <body x-data="editor" x-cloak>
     <header>
       <h1>logo-generator <span>editor</span></h1>
       <label
         >site
-        <select id="site"></select
-      ></label>
-      <button type="button" id="render-all">render all formats</button>
-      <button type="button" id="save" class="primary">save</button>
-      <span id="status"></span>
+        <span class="select is-small">
+          <select x-model="site" x-on:change="loadSite(site)" aria-label="site">
+            <template x-for="s in sites" :key="s">
+              <option x-bind:value="s" x-text="s"></option>
+            </template>
+          </select>
+        </span> </label
+      ><button type="button" class="button is-small" x-on:click="renderAll()">
+        render all formats
+      </button>
+      <button
+        type="button"
+        class="button is-small is-primary"
+        x-on:click="save()"
+      >
+        save
+      </button>
+      <span id="status" x-bind:class="statusCls" x-text="statusMsg"></span>
     </header>
-    <div class="grid">
-      <div class="col">
+    <div class="columns">
+      <div class="column">
         <section class="card">
-          <h2>global settings</h2>
+          <div class="h2">global settings</div>
           <div class="body">
             <label
               >font
-              <select id="font">
-                <option value="">—</option>
-              </select></label
-            >
+              <span class="select is-small">
+                <select
+                  x-model="fontSel"
+                  x-on:focus="loadFonts()"
+                  x-on:change="fontChanged()"
+                  aria-label="global font"
+                >
+                  <option value="">—</option>
+                  <template x-for="f in fonts" :key="f.path">
+                    <option
+                      x-bind:value="f.path"
+                      x-text="fontLabel(f)"
+                    ></option>
+                  </template>
+                </select> </span
+            ></label>
           </div>
         </section>
-        <section class="card" id="slot-editor" hidden>
-          <h2>
-            edit <code id="se-name"></code>
+        <section class="card" id="slot-editor" x-show="editOpen">
+          <div class="h2">
+            edit <code x-text="editTitle"></code>
             <span class="h2-tools">
-              <button type="button" id="se-apply" class="primary">apply</button>
-              <button type="button" id="se-close" title="close">×</button>
+              <button
+                type="button"
+                class="button is-small is-primary"
+                x-show="isDirty()"
+                x-on:click="applyEdit()"
+              >
+                apply
+              </button>
+              <button
+                type="button"
+                class="button is-small"
+                title="close"
+                x-on:click="closeEditor()"
+              >
+                ×
+              </button>
             </span>
-          </h2>
-          <div class="body" id="se-body"></div>
+          </div>
+          <div class="body" id="se-body">
+            <template x-if="draftKind === 'text'">
+              <div>
+                <div>
+                  <button
+                    type="button"
+                    class="button is-small"
+                    x-on:click="sw('**','**')"
+                  >
+                    <b>B</b>
+                  </button>
+                  <button
+                    type="button"
+                    class="button is-small"
+                    x-on:click="sw('*','*')"
+                  >
+                    <i>I</i>
+                  </button>
+                  <button
+                    type="button"
+                    class="button is-small"
+                    x-on:click="sw('__','__')"
+                  >
+                    <u>U</u>
+                  </button>
+                  <input
+                    type="color"
+                    x-model="mkColor"
+                    x-on:input="swColor()"
+                    title="inline color"
+                    aria-label="inline color"
+                  />
+                  <span class="select is-small">
+                    <select
+                      x-model="mkFont"
+                      x-on:change="swFont()"
+                      aria-label="inline font"
+                    >
+                      <option value="">font…</option>
+                      <template x-for="f in fontFamilies()" :key="f">
+                        <option x-bind:value="f" x-text="f"></option>
+                      </template>
+                    </select>
+                  </span>
+                </div>
+                <label
+                  >text
+                  <textarea
+                    class="textarea"
+                    x-ref="seText"
+                    x-model="dv.text"
+                    x-on:input="changed()"
+                    spellcheck="false"
+                  ></textarea>
+                </label>
+                <label
+                  >color
+                  <input type="color" x-model="dv.color" x-on:input="changed()"
+                /></label>
+              </div>
+            </template>
+            <template x-if="draftKind === 'image'">
+              <div>
+                <div>image</div>
+                <div id="se-src" x-text="srcLabel()"></div>
+                <button
+                  type="button"
+                  class="button is-small"
+                  x-on:click="openPick()"
+                >
+                  pick…
+                </button>
+                <span id="se-color-wrap" x-show="srcIsSvg()">
+                  <label
+                    >fill
+                    <input
+                      type="color"
+                      x-model="dv.fill"
+                      x-on:input="changed()"
+                  /></label>
+                  <label
+                    >stroke
+                    <input
+                      type="color"
+                      x-model="dv.stroke"
+                      x-on:input="changed()"
+                  /></label>
+                  <button
+                    type="button"
+                    class="button is-small"
+                    title="remove recolor"
+                    x-on:click="resetRecolor()"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            </template>
+          </div>
         </section>
         <section class="card">
-          <h2>config</h2>
+          <div class="h2">config</div>
           <div class="body">
             <textarea
-              id="config"
+              class="textarea"
+              x-model="configText"
+              x-on:input="previewDebounced()"
               spellcheck="false"
               aria-label="site config JSON"
             ></textarea>
           </div>
         </section>
       </div>
-      <div class="col">
+      <div class="column">
         <section class="card" id="tpl-card">
-          <h2>
+          <div class="h2">
             template
             <span class="h2-tools">
               <label
-                ><input type="checkbox" id="show-regions" checked />
+                ><input
+                  type="checkbox"
+                  x-model="showRegions"
+                  x-on:change="drawRegions()"
+                />
                 outlines</label
               >
-              <button type="button" id="map-tpl">map template…</button>
+              <button
+                type="button"
+                class="button is-small"
+                x-on:click="openMap()"
+              >
+                map template…
+              </button>
             </span>
-          </h2>
+          </div>
           <div class="body">
             <div class="preview">
-              <div id="tpl-stage">
-                <div id="tpl"></div>
-                <div id="tpl-overlay" hidden></div>
+              <div id="tpl-stage" x-ref="tplStage">
+                <div id="tpl" x-ref="tpl"></div>
+                <div id="tpl-overlay" x-ref="tplOverlay" hidden></div>
               </div>
             </div>
           </div>
         </section>
-        <section class="card" id="map-modal" hidden>
-          <h2>
+        <section class="card" id="map-modal" x-show="mapOpen">
+          <div class="h2">
             template regions — assign each element a slot
             <span class="h2-tools">
-              <button type="button" id="map-apply" class="primary">
+              <button
+                type="button"
+                class="button is-small is-primary"
+                x-on:click="mapApply()"
+              >
                 apply
               </button>
-              <button type="button" id="map-close">cancel</button>
+              <button
+                type="button"
+                class="button is-small"
+                x-on:click="mapCancel()"
+              >
+                cancel
+              </button>
             </span>
-          </h2>
-          <div class="body" id="map-list"></div>
+          </div>
+          <div class="body" id="map-list">
+            <template x-for="slot in allSlots" :key="slot">
+              <div class="map-row">
+                <code x-text="slot"></code> →
+                <span class="select is-small">
+                  <select
+                    x-model="mapAssign[slot]"
+                    x-on:change="mapAssigned(slot)"
+                  >
+                    <option value="">—</option>
+                    <template x-for="e in elsFor(slot)" :key="e.id">
+                      <option
+                        x-bind:value="e.id"
+                        x-text="mapOptLabel(e)"
+                      ></option>
+                    </template>
+                  </select>
+                </span>
+              </div>
+            </template>
+          </div>
         </section>
       </div>
-      <section class="card">
-        <h2>
+      <section class="card column">
+        <div class="h2">
           generated
           <span class="h2-tools">
             <label
               >backdrop
-              <select id="backdrop" aria-label="preview backdrop">
-                <option value="">checker</option>
-                <option value="#ffffff">white</option>
-                <option value="#000000">black</option>
-                <option value="#1a2438">dark</option>
-                <option value="custom">custom…</option>
-              </select>
+              <span class="select is-small">
+                <select
+                  x-model="backdrop"
+                  x-on:change="backdropChanged()"
+                  aria-label="preview backdrop"
+                >
+                  <option value="">checker</option>
+                  <option value="#ffffff">white</option>
+                  <option value="#000000">black</option>
+                  <option value="#1a2438">dark</option>
+                  <option value="custom">custom…</option>
+                </select>
+              </span>
               <input
                 type="color"
-                id="bg-color"
-                value="#888888"
-                hidden
+                x-model="bgColor"
+                x-on:input="backdropChanged()"
+                x-show="backdrop === 'custom'"
                 aria-label="custom backdrop color"
             /></label>
           </span>
-        </h2>
+        </div>
         <div class="body">
-          <div class="preview" id="gen"></div>
-          <div class="files" id="files"></div>
+          <div class="preview" id="gen" x-ref="gen"></div>
+          <div class="files">
+            <template x-for="f in filesList" :key="f">
+              <!-- biome-ignore lint/a11y/useValidAnchor lint/a11y/useAnchorContent: href and text bound by Alpine -->
+              <a
+                x-bind:href="fileUrl(f)"
+                x-text="f"
+                target="_blank"
+                rel="noopener"
+              ></a>
+            </template>
+          </div>
         </div>
       </section>
     </div>
-    <div id="modal" hidden>
+    <div id="modal" x-show="modalOpen">
       <div class="dlg">
         <h2>assets/images</h2>
-        <div id="img-list"></div>
-        <button type="button" id="modal-close">close</button>
+        <div>
+          <template x-for="i in imgList" :key="i.path">
+            <button
+              type="button"
+              class="pick button is-small"
+              x-on:click="pickImg(i)"
+            >
+              <img x-bind:src="assetUrl(i)" alt="" />
+              <span x-text="i.name"></span>
+            </button>
+          </template>
+        </div>
+        <button type="button" class="button is-small" x-on:click="closeModal()">
+          close
+        </button>
       </div>
     </div>
-    <script>
-      const $ = (id) => document.getElementById(id);
-      const status = (msg, ok) => {
-        $("status").textContent = msg;
-        $("status").className = msg ? (ok ? "ok" : "err") : "";
-      };
-
-      async function j(method, url, body) {
-        const r = await fetch(url, { method, body });
-        const t = await r.text();
-        let d = {};
-        try {
-          d = JSON.parse(t);
-        } catch {
-          d = { error: t };
-        }
-        if (!r.ok) throw new Error(d.error || `${r.status}`);
-        return d;
-      }
-
-      async function loadSites() {
-        let d;
-        try {
-          d = await j("GET", "/api/sites");
-        } catch (e) {
-          status(
-            `can't load sites: ${e.message} — is -ui running from the repo root?`,
-            false,
-          );
-          return;
-        }
-        $("site").innerHTML = d.sites
-          .map((s) => `<option>${s}</option>`)
-          .join("");
-        $("site").onchange = () => loadSite($("site").value);
-        if (d.sites[0]) loadSite(d.sites[0]);
-      }
-
-      async function loadSite(name) {
-        try {
-          const d = await j(
-            "GET",
-            `/api/site?name=${encodeURIComponent(name)}`,
-          );
-          $("config").value = d.config;
-          injectSvg($("tpl"), d.template || "");
-          // Size the stage from the SVG's viewBox immediately — without
-          // this it collapses until template-analyze lands (grid shifts).
-          const tsv = $("tpl").querySelector("svg")?.viewBox?.baseVal;
-          if (tsv?.width > 0 && tsv?.height > 0)
-            $("tpl-stage").style.aspectRatio = `${tsv.width} / ${tsv.height}`;
-          $("files").innerHTML = "";
-          if (draft) closeEditor();
-          preview();
-          try {
-            const a = await j("POST", "/api/template-analyze", d.config);
-            regions = a.elements;
-            tplBox = a.viewBox;
-            for (const e of a.elements) if (e.slot) slotMap[e.id] = e.slot;
-            drawRegions();
-            const unmapped = a.elements.filter((e) => !e.slot).length;
-            if (unmapped)
-              status(
-                `${unmapped} unmapped template region(s) — use map template… or the output keeps the outlines`,
-                true,
-              );
-          } catch {
-            regions = null;
-            drawRegions();
-          }
-        } catch (e) {
-          status(e.message, false);
-        }
-      }
-
-      let fonts = [];
-      let regions = null,
-        tplBox = null;
-      const slotMap = {};
-
-      // Unfilled {{slot}} hrefs would be fetched as relative URLs by the
-      // browser — strip them so the raw template preview doesn't 404.
-      function injectSvg(host, svg) {
-        host.innerHTML = svg;
-        host.querySelectorAll("[href],[xlink\\:href]").forEach((el) => {
-          for (const a of ["href", "xlink:href"]) {
-            if (el.getAttribute(a)?.includes("{{")) el.removeAttribute(a);
-          }
-        });
-      }
-
-      function drawRegions() {
-        const ov = $("tpl-overlay");
-        ov.innerHTML = "";
-        if (!regions || !tplBox || tplBox.length !== 4) {
-          ov.hidden = true;
-          return;
-        }
-        const [minX, minY, vbW, vbH] = tplBox.map(Number);
-        $("tpl-stage").style.aspectRatio = `${vbW} / ${vbH}`;
-        for (const e of regions) {
-          const d = document.createElement("div");
-          d.dataset.el = e.id;
-          const slot = slotMap[e.id];
-          d.className = `region${e.tag === "text" ? " txt" : ""}${slot ? " on" : ""}`;
-          const x = ((e.x - minX) / vbW) * 100;
-          const y = ((e.y - minY) / vbH) * 100;
-          const w = Math.max((e.w / vbW) * 100, 1.2);
-          const h = Math.max((e.h / vbH) * 100, 1.2);
-          d.style.cssText = `left:${x}%;top:${y}%;width:${w}%;height:${h}%`;
-          const b = document.createElement("b");
-          b.textContent = slot || e.id;
-          d.append(b);
-          ov.append(d);
-        }
-        ov.hidden = !$("show-regions").checked;
-      }
-      $("show-regions").onchange = drawRegions;
-      const setBackdrop = (css) =>
-        document.querySelectorAll(".preview").forEach((p) => {
-          p.style.background = css;
-        });
-      $("backdrop").onchange = () => {
-        const v = $("backdrop").value;
-        $("bg-color").hidden = v !== "custom";
-        setBackdrop(v === "custom" ? $("bg-color").value : v);
-      };
-      $("bg-color").oninput = () => setBackdrop($("bg-color").value);
-
-      let timer;
-      function preview() {
-        clearTimeout(timer);
-        timer = setTimeout(async () => {
-          try {
-            let body = $("config").value;
-            if (draft) {
-              const o = JSON.parse(body);
-              applyDraft(o);
-              body = JSON.stringify(o);
-            }
-            const d = await j("POST", "/api/preview", body);
-            injectSvg($("gen"), d.svg);
-            status("");
-          } catch (e) {
-            status(e.message, false);
-          }
-        }, 350);
-      }
-
-      $("config").oninput = preview;
-      const patch = (fn) => {
-        let o;
-        try {
-          o = JSON.parse($("config").value);
-        } catch {
-          status("invalid JSON", false);
-          return;
-        }
-        fn(o);
-        $("config").value = JSON.stringify(o, null, 2);
-        preview();
-      };
-
-      // -- contextual slot editor ------------------------------------
-      // A click on a template region opens the panel below "generated":
-      // edits go into `draft`, preview renders config+draft, and "apply"
-      // writes the draft into the JSON document (save persists to disk).
-      let draft = null; // {kind:"text"|"image", slot, el, value:{…}}
-
-      const applyDraft = (o) => {
-        const v = draft.value;
-        if (draft.kind === "text") {
-          o.text ||= {};
-          o.text[draft.slot] = v.color
-            ? { text: v.text, color: v.color }
-            : v.text;
-        } else {
-          o.images ||= {};
-          o.images[draft.slot] =
-            v.fill || v.stroke
-              ? {
-                  src: v.src,
-                  ...(v.fill && { fill: v.fill }),
-                  ...(v.stroke && { stroke: v.stroke }),
-                }
-              : v.src;
-        }
-      };
-
-      const closeEditor = () => {
-        draft = null;
-        $("slot-editor").hidden = true;
-        document.querySelectorAll(".region.sel").forEach((r) => {
-          r.classList.remove("sel");
-        });
-        preview();
-      };
-
-      const imgSrc = (cur) => (typeof cur === "string" ? cur : cur?.src || "");
-      const isSvgSrc = (src) =>
-        src.toLowerCase().endsWith(".svg") || src.startsWith("data:image/svg");
-
-      function openEditor(el) {
-        const slot = slotMap[el.id] || el.slot;
-        if (!slot) {
-          status(`${el.id} has no slot — use map template…`, false);
-          return;
-        }
-        let o;
-        try {
-          o = JSON.parse($("config").value);
-        } catch {
-          status("invalid JSON", false);
-          return;
-        }
-        const kind = el.tag === "text" ? "text" : "image";
-        const cur = kind === "text" ? o.text?.[slot] : o.images?.[slot];
-        draft = {
-          kind,
-          slot,
-          el: el.id,
-          value:
-            kind === "text"
-              ? {
-                  text: typeof cur === "string" ? cur : cur?.text || "",
-                  color: typeof cur === "object" && cur ? cur.color || "" : "",
-                }
-              : {
-                  src: imgSrc(cur),
-                  fill: cur?.fill || "",
-                  stroke: cur?.stroke || "",
-                },
-        };
-        draft.orig = { ...draft.value };
-        document.querySelectorAll(".region.sel").forEach((r) => {
-          r.classList.remove("sel");
-        });
-        document
-          .querySelector(`.region[data-el="${el.id}"]`)
-          ?.classList.add("sel");
-        $("se-name").textContent = `${slot} → ${el.id}`;
-        buildSeBody();
-        $("slot-editor").hidden = false;
-      }
-
-      // click a region box (full bbox) or the svg element itself
-      $("tpl-overlay").addEventListener("click", (e) => {
-        const r = e.target.closest(".region");
-        const el = r && regions?.find((x) => x.id === r.dataset.el);
-        if (el) openEditor(el);
-      });
-      $("tpl").addEventListener("click", (e) => {
-        const n = e.target.closest("[id]");
-        const el = n && regions?.find((x) => x.id === n.id);
-        if (el) openEditor(el);
-      });
-
-      const syncApply = () => {
-        $("se-apply").hidden =
-          !draft || JSON.stringify(draft.value) === JSON.stringify(draft.orig);
-      };
-      const changed = () => {
-        syncApply();
-        preview();
-      };
-
-      function buildSeBody() {
-        const b = $("se-body");
-        syncApply();
-        if (draft.kind === "text") {
-          b.innerHTML = `<div>
-              <button type="button" data-smk="b"><b>B</b></button>
-              <button type="button" data-smk="i"><i>I</i></button>
-              <button type="button" data-smk="u"><u>U</u></button>
-              <input type="color" id="se-mk-color" value="#e45842" title="inline color" aria-label="inline color" />
-              <select id="se-mk-font" aria-label="inline font"><option value="">font…</option></select>
-            </div>
-            <label>text <textarea id="se-text" spellcheck="false"></textarea></label>
-            <label>color <input type="color" id="se-color" value="#ffffff" /></label>`;
-          $("se-text").value = draft.value.text;
-          if (draft.value.color) $("se-color").value = draft.value.color;
-          const sw = (pre, post) => {
-            const t = $("se-text");
-            t.setRangeText(
-              pre + t.value.slice(t.selectionStart, t.selectionEnd) + post,
-              t.selectionStart,
-              t.selectionEnd,
-              "select",
-            );
-            draft.value.text = t.value;
-            changed();
-          };
-          b.querySelectorAll("[data-smk]").forEach((btn) => {
-            const marks = { b: ["**", "**"], i: ["*", "*"], u: ["__", "__"] };
-            btn.onclick = () => sw(...marks[btn.dataset.smk]);
-          });
-          $("se-text").oninput = () => {
-            draft.value.text = $("se-text").value;
-            changed();
-          };
-          $("se-color").oninput = () => {
-            draft.value.color = $("se-color").value;
-            changed();
-          };
-          $("se-mk-color").oninput = () =>
-            sw(`[${$("se-mk-color").value}]`, "[/]");
-          $("se-mk-font").innerHTML =
-            `<option value="">font…</option>` +
-            [...new Set(fonts.map((f) => f.family).filter(Boolean))]
-              .sort()
-              .map((f) => `<option>${f}</option>`)
-              .join("");
-          $("se-mk-font").onchange = () => {
-            const fam = $("se-mk-font").value;
-            if (!fam) return;
-            $("se-mk-font").value = "";
-            sw(`[font:${fam}]`, "[/]");
-          };
-        } else {
-          b.innerHTML = `<label>image</label>
-            <div id="se-src"></div>
-            <button type="button" id="se-pick">pick…</button>
-            <span id="se-color-wrap">
-              <label>fill <input type="color" id="se-fill" value="#ffffff" /></label>
-              <label>stroke <input type="color" id="se-stroke" value="#000000" /></label>
-              <button type="button" id="se-reset" title="remove recolor">×</button>
-            </span>`;
-          const sync = () => {
-            $("se-src").textContent = draft.value.src || "(empty)";
-            $("se-color-wrap").hidden = !isSvgSrc(draft.value.src);
-            if (draft.value.fill) $("se-fill").value = draft.value.fill;
-            if (draft.value.stroke) $("se-stroke").value = draft.value.stroke;
-          };
-          sync();
-          $("se-pick").onclick = openPick;
-          $("se-fill").oninput = () => {
-            draft.value.fill = $("se-fill").value;
-            changed();
-          };
-          $("se-stroke").oninput = () => {
-            draft.value.stroke = $("se-stroke").value;
-            changed();
-          };
-          $("se-reset").onclick = () => {
-            draft.value.fill = "";
-            draft.value.stroke = "";
-            sync();
-            changed();
-          };
-        }
-      }
-
-      $("se-apply").onclick = () => {
-        if (!draft) return;
-        patch(applyDraft);
-        draft.orig = { ...draft.value };
-        syncApply();
-        status(`${draft.slot} applied — press save to persist`, true);
-      };
-      $("se-close").onclick = closeEditor;
-
-      // image picker modal — writes into the open draft
-      const openPick = async () => {
-        try {
-          const d = await j("GET", "/api/images");
-          if (!d.images.length) {
-            status("no files in assets/images", false);
-            return;
-          }
-          $("img-list").innerHTML = "";
-          for (const i of d.images) {
-            const b = document.createElement("button");
-            b.type = "button";
-            b.className = "pick";
-            const img = document.createElement("img");
-            img.src = `/asset/${i.path.replace("assets/", "")}`;
-            img.alt = "";
-            b.append(img, document.createTextNode(i.name));
-            b.onclick = () => {
-              if (draft?.kind === "image") {
-                draft.value.src = i.path;
-                buildSeBody();
-                changed();
-              }
-              $("modal").hidden = true;
-            };
-            $("img-list").append(b);
-          }
-          $("modal").hidden = false;
-        } catch (e) {
-          status(e.message, false);
-        }
-      };
-      $("modal-close").onclick = () => {
-        $("modal").hidden = true;
-      };
-
-      async function loadFonts() {
-        try {
-          const prev = $("font").value;
-          const d = await j("GET", "/api/fonts");
-          fonts = d.fonts;
-          $("font").innerHTML =
-            `<option value="">—</option>` +
-            d.fonts
-              .map(
-                (f) =>
-                  `<option value="${f.path}">${f.name}${f.family ? ` — ${f.family}` : ""}</option>`,
-              )
-              .join("");
-          $("font").value = prev;
-        } catch {
-          /* no assets/fonts dir */
-        }
-      }
-      $("font").onfocus = loadFonts; // rescan assets/fonts on every open
-      $("font").onchange = () => {
-        const path = $("font").value;
-        if (!path) return;
-        const it = fonts.find((f) => f.path === path);
-        const family =
-          it?.family ||
-          path
-            .split("/")
-            .pop()
-            .replace(/\.[^.]+$/, "");
-        patch((o) => {
-          o.render ||= {};
-          o.render.fontFiles = [path];
-          o.render.fontFamily = family;
-        });
-      };
-      $("map-tpl").onclick = async () => {
-        try {
-          const d = await j("POST", "/api/template-analyze", $("config").value);
-          regions = d.elements;
-          tplBox = d.viewBox;
-          for (const e of d.elements) if (e.slot) slotMap[e.id] = e.slot;
-          drawRegions();
-          $("map-list").innerHTML = "";
-          const figs = d.elements.filter((e) => e.tag !== "text");
-          const texts = d.elements.filter((e) => e.tag === "text");
-          const syncSelects = () => {
-            document.querySelectorAll("#map-list select").forEach((sel) => {
-              const cur = Object.entries(slotMap).find(
-                ([, sl]) => sl === sel.dataset.slot,
-              );
-              sel.value = cur ? cur[0] : "";
-            });
-          };
-          const mkRow = (slot, els) => {
-            const row = document.createElement("div");
-            row.className = "map-row";
-            const label = document.createElement("code");
-            label.textContent = slot;
-            row.append(label, "→");
-            const sel = document.createElement("select");
-            sel.dataset.slot = slot;
-            sel.innerHTML =
-              `<option value="">—</option>` +
-              els
-                .map((e) => {
-                  const dim = e.w
-                    ? ` (${Math.round(e.w)}×${Math.round(e.h)})`
-                    : "";
-                  return `<option value="${e.id}">${e.id}${dim}</option>`;
-                })
-                .join("");
-            sel.onchange = () => {
-              for (const id of Object.keys(slotMap)) {
-                if (slotMap[id] === slot) delete slotMap[id];
-              }
-              if (sel.value) slotMap[sel.value] = slot;
-              syncSelects();
-              drawRegions();
-            };
-            row.append(sel);
-            return row;
-          };
-          for (const slot of [
-            "image1",
-            "image2",
-            "image3",
-            "image4",
-            "image5",
-            "image6",
-            "text1",
-            "text2",
-            "text3",
-            "text4",
-            "text5",
-            "text6",
-          ]) {
-            $("map-list").append(
-              mkRow(slot, slot.startsWith("text") ? texts : figs),
-            );
-          }
-          syncSelects();
-          $("map-modal").hidden = false;
-        } catch (e) {
-          status(e.message, false);
-        }
-      };
-      $("map-close").onclick = () => {
-        $("map-modal").hidden = true;
-      };
-      $("map-apply").onclick = async () => {
-        const mapping = {};
-        document.querySelectorAll("#map-list select").forEach((sel) => {
-          if (sel.value) mapping[sel.dataset.slot] = sel.value;
-        });
-        if (!Object.keys(mapping).length) {
-          status("no slots assigned", false);
-          return;
-        }
-        try {
-          const d = await j(
-            "POST",
-            "/api/template-fill",
-            JSON.stringify({
-              config: JSON.parse($("config").value),
-              mapping,
-            }),
-          );
-          patch((o) => {
-            o.template = d.template;
-          });
-          $("map-modal").hidden = true;
-          status(`wrote ${d.template}`, true);
-        } catch (e) {
-          status(e.message, false);
-        }
-      };
-      loadFonts();
-      $("save").onclick = async () => {
-        try {
-          const name = $("site").value;
-          await j(
-            "POST",
-            `/api/save?name=${encodeURIComponent(name)}`,
-            $("config").value,
-          );
-          status(`saved configs/${name}.json`, true);
-        } catch (e) {
-          status(e.message, false);
-        }
-      };
-      $("render-all").onclick = async () => {
-        try {
-          const d = await j("POST", "/api/render", $("config").value);
-          status(`wrote: ${d.files.join(", ")}`, true);
-          $("files").innerHTML = d.files
-            .map(
-              (f) =>
-                `<a href="/out/${f}" target="_blank" rel="noopener">${f}</a>`,
-            )
-            .join(" · ");
-        } catch (e) {
-          status(e.message, false);
-        }
-      };
-      loadSites();
-    </script>
+    <script src="/static/app.js"></script>
   </body>
 </html>

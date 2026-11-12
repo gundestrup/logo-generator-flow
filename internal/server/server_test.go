@@ -154,6 +154,24 @@ func TestEditRenderAll(t *testing.T) {
 	}
 }
 
+func TestEditRenderAllSSE(t *testing.T) {
+	h := newEditTestHandler(t)
+	req := httptest.NewRequest("POST", "/api/render", strings.NewReader(editTestConfig))
+	req.Header.Set("Accept", "text/event-stream")
+	w := httptest.NewRecorder()
+	Mux(h, func() {}).ServeHTTP(w, req)
+	if ct := w.Header().Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
+		t.Fatalf("content-type %q, want event-stream", ct)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, `data: {"file":"logo.svg"}`) {
+		t.Fatalf("missing progress frame: %q", body)
+	}
+	if !strings.Contains(body, `data: {"done":true,"files":["acme/logo.svg"]}`) {
+		t.Fatalf("missing done frame: %q", body)
+	}
+}
+
 func TestOutputFile(t *testing.T) {
 	h := newEditTestHandler(t)
 	// #nosec G301 -- test fixture in a private t.TempDir().

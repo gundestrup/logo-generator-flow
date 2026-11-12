@@ -4,13 +4,14 @@ package server
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
@@ -27,8 +28,8 @@ import (
 	"example.com/logo-generator/internal/render"
 )
 
-//go:embed static/index.html
-var indexHTML []byte
+//go:embed static
+var staticFS embed.FS
 
 // Mux builds the editor's route table; kept separate from Serve so
 // tests exercise the real registered routes instead of re-dispatching.
@@ -37,6 +38,8 @@ var indexHTML []byte
 func Mux(h *handler, onShutdown func()) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.index)
+	sub, _ := fs.Sub(staticFS, "static")
+	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(sub)))
 	mux.HandleFunc("GET /api/sites", h.sites)
 	mux.HandleFunc("GET /api/site", h.site)
 	mux.HandleFunc("GET /api/images", h.assetList("assets/images", "images"))
@@ -163,7 +166,8 @@ func (h *handler) configPath(name string) (string, error) {
 
 func (h *handler) index(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(indexHTML)
+	b, _ := staticFS.ReadFile("static/index.html")
+	_, _ = w.Write(b)
 }
 
 func (h *handler) sites(w http.ResponseWriter, _ *http.Request) {
@@ -426,17 +430,41 @@ func (h *handler) renderAll(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err)
 		return
 	}
-	if err := render.Site(cfg, filepath.Join(h.outDir, cfg.Name)); err != nil {
-		jsonErr(w, err)
-		return
-	}
 	files := make([]string, 0, len(cfg.Output.Formats))
 	for _, f := range cfg.Output.Formats {
 		if norm := config.NormalizeFormat(f); norm != "" {
 			files = append(files, cfg.Name+"/logo."+norm)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"files": files})
+	if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+		if err := render.Site(cfg, filepath.Join(h.outDir, cfg.Name)); err != nil {
+			jsonErr(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"files": files})
+		return
+	}
+	// SSE progress: one data: {"file":…} frame per written file, then a
+	// final {"done":true,"files":[…]} (or {"error":…}) frame.
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusServiceUnavailable)
+		return
+	}
+	send := func(v any) {
+		b, _ := json.Marshal(v)
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", b)
+		fl.Flush()
+	}
+	if err := render.Site(cfg, filepath.Join(h.outDir, cfg.Name), func(path string) {
+		send(map[string]string{"file": filepath.Base(path)})
+	}); err != nil {
+		send(map[string]string{"error": err.Error()})
+		return
+	}
+	send(map[string]any{"done": true, "files": files})
 }
 
 func (h *handler) save(w http.ResponseWriter, r *http.Request) {

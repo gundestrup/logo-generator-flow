@@ -10,14 +10,16 @@
   },
   "scripts": {
     "demo:media": "sh scripts/docs-demo.sh",
-    "lint:frontend": "biome lint demo/*.html internal/server/static/*.html docs/assets/*.html scripts/*.mjs",
+    "lint:frontend": "biome lint demo/*.html internal/server/static/index.html internal/server/static/app.js docs/assets/*.html scripts/*.mjs",
     "format:check": "prettier --check package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"internal/server/static/*.html\" \"docs/assets/*.html\"",
     "format": "prettier --write package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"internal/server/static/*.html\" \"docs/assets/*.html\"",
     "check": "npm run lint:frontend && npm run lint:dom && npm run format:check",
     "lint:dom": "node scripts/check-dom-refs.mjs"
   },
   "devDependencies": {
+    "@alpinejs/csp": "3.17.5",
     "@biomejs/biome": "2.6.4",
+    "bulma": "1.0.4",
     "prettier": "3.9.10"
   }
 }

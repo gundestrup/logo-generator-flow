@@ -32,7 +32,15 @@ func wrote(path string) {
 }
 
 // Site renders one site: logo.svg plus the formats in cfg.Output.Formats.
-func Site(cfg config.Config, outDir string) error {
+// Optional progress callbacks fire once per written file (path included)
+// alongside the normal "wrote" log line — the editor uses this for SSE.
+func Site(cfg config.Config, outDir string, progress ...func(string)) error {
+	emit := func(path string) {
+		wrote(path)
+		for _, p := range progress {
+			p(path)
+		}
+	}
 	svg, err := Template(cfg)
 	if err != nil {
 		return err
@@ -52,13 +60,13 @@ func Site(cfg config.Config, outDir string) error {
 	if err := os.WriteFile(svgPath, svg, 0o644); err != nil {
 		return fmt.Errorf("write SVG: %w", err)
 	}
-	wrote(svgPath)
+	emit(svgPath)
 
 	wanted := formatsSet(cfg.Output.Formats)
 	if !wanted["png"] && !wanted["jpg"] && !wanted["webp"] && !wanted["avif"] {
 		return nil
 	}
-	return renderRasters(cfg, wanted, stem, svgPath)
+	return renderRasters(cfg, wanted, stem, svgPath, emit)
 }
 
 func formatsSet(formats []string) map[string]bool {
@@ -72,7 +80,7 @@ func formatsSet(formats []string) map[string]bool {
 // renderRasters renders the master PNG via resvg and converts it into every
 // requested derived format. The intermediate PNG is removed unless "png" is
 // among the wanted formats.
-func renderRasters(cfg config.Config, wanted map[string]bool, stem, svgPath string) error {
+func renderRasters(cfg config.Config, wanted map[string]bool, stem, svgPath string, emit func(string)) error {
 	tools, err := resolveTools(cfg, wanted)
 	if err != nil {
 		return err
@@ -81,7 +89,7 @@ func renderRasters(cfg config.Config, wanted map[string]bool, stem, svgPath stri
 	if err := svgToPNG(cfg, tools.resvg, svgPath, pngPath); err != nil {
 		return err
 	}
-	wrote(pngPath)
+	emit(pngPath)
 
 	converts := []struct {
 		format string
@@ -98,7 +106,7 @@ func renderRasters(cfg config.Config, wanted map[string]bool, stem, svgPath stri
 		if err := c.fn(); err != nil {
 			return err
 		}
-		wrote(stem + "." + c.format)
+		emit(stem + "." + c.format)
 	}
 	if !wanted["png"] {
 		if err := os.Remove(pngPath); err != nil && !errors.Is(err, os.ErrNotExist) {
