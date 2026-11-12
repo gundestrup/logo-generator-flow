@@ -21,7 +21,7 @@ jobs:
         run: |
           mkdir -p /tmp/smoke
           cat > /tmp/smoke/site.json <<'EOF'
-          {"name": "smoke", "template": "templates/logo.svg",
+          {"name": "smoke", "template": "assets/templates/logo.svg",
            "output": {"formats": ["svg"]},
            "text": {"text1": "CI", "text2": "", "text3": "", "text4": ""},
            "images": {"image1": "", "image2": ""}}

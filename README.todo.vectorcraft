@@ -64,7 +64,7 @@ Everything this file uses — the importer subset:
 ## 2. Slot mapping discovered (`UI change` layer, id=71)
 
 Element **names survive export as SVG `id`s** (already proven:
-`templates/borg-collective.svg` is this file's export + `{{slots}}`):
+`assets/templates/borg-collective.svg` is this file's export + `{{slots}}`):
 
 | Element       | Type / geometry                          | Current slot |
 | ------------- | ---------------------------------------- | ------------ |
@@ -188,7 +188,7 @@ Bonus trick for text: a VectorCraft text object may literally contain
 2. If no CLI release exists → decide: build from source (cargo), or use
    `--control` protocol on the GUI binary (session API, heavier).
 3. Confirm resvg renders the CLI-exported SVG identically to the committed
-   `templates/borg-collective.svg` (fonts: file styles say *Source Sans 3*;
+   `assets/templates/borg-collective.svg` (fonts: file styles say *Source Sans 3*;
    `render.fontFamily` overrides all `font-family` decls anyway).
 4. Decide temp vs. cache: export to `os.MkdirTemp` per run (simple,
    mirrors current temp-SVG flow for resvg) — no caching needed at this

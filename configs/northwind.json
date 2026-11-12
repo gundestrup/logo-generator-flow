@@ -1,6 +1,6 @@
 {
   "name": "northwind",
-  "template": "templates/logo.svg",
+  "template": "assets/templates/logo.svg",
   "output": {
     "formats": ["svg", "png", "jpg"]
   },

@@ -85,7 +85,7 @@ fontFiles) resolve against the working directory.
 ```json
 {
   "name": "acme",
-  "template": "templates/logo.svg",
+  "template": "assets/templates/logo.svg",
   "output": { "formats": ["svg", "png", "webp", "avif", "jpg"] },
   "render": {
     "width": 1600,
@@ -212,7 +212,7 @@ the JSON, and **save** writes it to disk.
 analyzes the configured template's `id`'d elements and lists each
 region with its bounding box in a card below the template; assigning an
 element per slot and clicking **apply** writes
-`templates/<name>-filled.svg` — figure outlines become `<image>`
+`assets/templates/<name>-filled.svg` — figure outlines become `<image>`
 elements at their box geometry (aspect preserved via `xMidYMid meet`),
 text elements distribute assigned slots across their tspans. Path boxes
 are min/max over `d` coordinates — exact for absolute-coordinate

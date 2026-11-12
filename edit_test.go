@@ -17,7 +17,7 @@ const editTestTemplate = `<svg xmlns="http://www.w3.org/2000/svg"><text>{{text1}
 
 const editTestConfig = `{
   "name": "acme",
-  "template": "templates/logo.svg",
+  "template": "assets/templates/logo.svg",
   "output": {"formats": ["svg"]},
   "text": {"text1": "Acme Co", "text2": "", "text3": "", "text4": ""}
 }`
@@ -26,14 +26,14 @@ func newEditTestHandler(t *testing.T) *editHandler {
 	t.Helper()
 	root := t.TempDir()
 	configs := filepath.Join(root, "configs")
-	mustMkdir(t, filepath.Join(root, "templates"))
+	mustMkdir(t, filepath.Join(root, "assets/templates"))
 	mustMkdir(t, configs)
 	// #nosec G306 -- test fixture file
 	if err := os.WriteFile(filepath.Join(configs, "acme.json"), []byte(editTestConfig), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	// #nosec G306 -- test fixture file
-	if err := os.WriteFile(filepath.Join(root, "templates", "logo.svg"), []byte(editTestTemplate), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "assets/templates", "logo.svg"), []byte(editTestTemplate), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Chdir(root)
@@ -205,7 +205,7 @@ func TestEditAssets(t *testing.T) {
 
 func TestEditPreviewObjectSlots(t *testing.T) {
 	h := newEditTestHandler(t)
-	cfg := `{"name":"acme","template":"templates/logo.svg","output":{"formats":["svg"]},
+	cfg := `{"name":"acme","template":"assets/templates/logo.svg","output":{"formats":["svg"]},
 		"text":{"text1":{"text":"Styled","color":"#ff0000"},"text2":"","text3":"","text4":""}}`
 	w := doEdit(h, "POST", "/api/preview", cfg)
 	if w.Code != 200 {
@@ -384,7 +384,7 @@ func TestTplFill(t *testing.T) {
 	if w = doEdit(h, "POST", "/api/template-fill", string(body)); w.Code != 400 {
 		t.Fatalf("invalid slot: expected 400, got %d", w.Code)
 	}
-	// Out path escaping templates/ → 400.
+	// Out path escaping assets/templates/ → 400.
 	body, _ = json.Marshal(tplFillReq{Config: json.RawMessage(cfg), Mapping: map[string]string{"image1": "Box"}, Out: "../x.svg"})
 	if w = doEdit(h, "POST", "/api/template-fill", string(body)); w.Code != 400 {
 		t.Fatalf("bad out: expected 400, got %d", w.Code)
@@ -614,7 +614,7 @@ func TestEditSaveErrors(t *testing.T) {
 func TestEditRenderAllMissingTools(t *testing.T) {
 	h := newEditTestHandler(t)
 	t.Setenv("PATH", t.TempDir()) // no resvg/cwebp/avifenc on PATH
-	cfg := `{"name":"acme","template":"templates/logo.svg","output":{"formats":["svg","png"]}}`
+	cfg := `{"name":"acme","template":"assets/templates/logo.svg","output":{"formats":["svg","png"]}}`
 	if w := doEdit(h, "POST", "/api/render", cfg); w.Code == 200 {
 		t.Fatal("missing tools should fail at preflight")
 	}

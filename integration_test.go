@@ -20,11 +20,11 @@ func TestIntegrationRealTools(t *testing.T) {
 		}
 	}
 	dir := t.TempDir()
-	for _, d := range []string{"configs", "templates", "img"} {
+	for _, d := range []string{"configs", "assets/templates", "img"} {
 		mustMkdir(t, filepath.Join(dir, d))
 	}
 	t.Chdir(dir)
-	writeFile(t, "templates/it.svg", `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60">
+	writeFile(t, "assets/templates/it.svg", `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60">
   <rect width="120" height="60" fill="#ffffff"/>
   <text x="10" y="35" font-size="20">{{text1}}</text>
   <image href="{{image1}}" x="90" y="10" width="24" height="24"/>
@@ -32,7 +32,7 @@ func TestIntegrationRealTools(t *testing.T) {
 	writeFile(t, "img/mark.svg", `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#e45842"/></svg>`)
 	writeFile(t, "configs/itest.json", `{
   "name": "itest",
-  "template": "templates/it.svg",
+  "template": "assets/templates/it.svg",
   "output": {"formats": ["svg", "png", "webp", "avif", "jpeg"]},
   "text": {"text1": "IT"},
   "images": {"image1": "img/mark.svg"}

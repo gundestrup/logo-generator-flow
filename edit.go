@@ -712,15 +712,15 @@ func (h *editHandler) tplFill(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err)
 		return
 	}
-	dst := strings.TrimSuffix(cfg.Template, filepath.Ext(cfg.Template)) + "-filled.svg"
+	dst := strings.TrimSuffix(strings.TrimSuffix(cfg.Template, filepath.Ext(cfg.Template)), "-filled") + "-filled.svg"
 	if req.Out != "" {
-		if !strings.HasPrefix(req.Out, "templates/") || strings.Contains(req.Out, "..") || !strings.HasSuffix(req.Out, ".svg") {
-			jsonErr(w, fmt.Errorf("out must stay under templates/ and end in .svg"))
+		if !strings.HasPrefix(req.Out, "assets/templates/") || strings.Contains(req.Out, "..") || !strings.HasSuffix(req.Out, ".svg") {
+			jsonErr(w, fmt.Errorf("out must stay under assets/templates/ and end in .svg"))
 			return
 		}
 		dst = req.Out
 	}
-	// #nosec G306 G703 -- dst is constrained to templates/*.svg or derived from the config template path.
+	// #nosec G306 G703 -- dst is constrained to assets/templates/*.svg or derived from the config template path.
 	if err := os.WriteFile(dst, []byte(filled), 0o644); err != nil {
 		jsonErr(w, err)
 		return

@@ -72,11 +72,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   template + regions card · generated. `map template…` + `outlines`
   moved into the template headline, backdrop into the generated
   headline; the config card is raw JSON only.
+- `templates/` moved to `assets/templates/` — all user inputs (images,
+  fonts, templates) now live under `assets/`; config `template` paths,
+  the `template-fill` out guard, `.gitignore`, CI, and sonar exclusions
+  updated.
 - Editor tests drive the real route table via `editMux` + `ServeHTTP`
   (coverage ~83%); a11y labels added to unlabeled inputs.
 
 ### Fixed
 
+- `template-fill` appended `-filled` to the config's current template
+  each run, producing `…-filled-filled-filled.svg` chains; the suffix
+  is now stripped before appending so fills are idempotent.
 - Missing `mk-tools` markup crashed script evaluation on load
   (`Cannot set properties of null`) leaving the site dropdown empty.
 - `styledText` passed XML-invalid control bytes through — `xmlSafe`
