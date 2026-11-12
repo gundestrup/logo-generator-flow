@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -432,16 +433,16 @@ func TestFontFamilyOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(out)
-	if !strings.Contains(s, `<text font-family="New Font"`) {
+	if !strings.Contains(s, `<text font-family="'New Font'"`) {
 		t.Fatalf("template font not overridden: %s", s)
 	}
-	if !strings.Contains(s, `font-family="Keep"`) {
+	if !strings.Contains(s, `font-family="Keep"`) { // single ident stays unquoted
 		t.Fatalf("styled [font:] run must keep its family: %s", s)
 	}
 	if strings.Contains(s, "Old Font") {
 		t.Fatalf("single-quoted + CSS-decl families not overridden: %s", s)
 	}
-	if !strings.Contains(s, `font-family:New Font`) {
+	if !strings.Contains(s, `font-family:'New Font'`) {
 		t.Fatalf("style-block declaration not rewritten: %s", s)
 	}
 	// Unset → template untouched.
@@ -506,5 +507,25 @@ func TestRenderSiteToolFailure(t *testing.T) {
 	cfg.Output.Formats = []string{"svg", "webp"}
 	if err := Site(cfg, filepath.Join(dir, "out")); err == nil {
 		t.Fatal("failing cwebp should propagate an error")
+	}
+}
+
+func TestUnusedSlots(t *testing.T) {
+	tpl := []byte(`<svg><text>{{text1}}</text><image href="{{image1}}"/></svg>`)
+	c := config.Config{
+		Text: map[string]config.TextSlot{
+			"text1": {Value: "used"},
+			"text2": {Value: "dropped"},
+			"text3": {Value: ""}, // empty — not a real drop
+		},
+		Images: map[string]config.ImageSlot{
+			"image1": {Src: "a.png"},
+			"image2": {Src: "b.png"},
+		},
+	}
+	got := unusedSlots(c, tpl)
+	want := []string{"image2", "text2"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unusedSlots = %v, want %v", got, want)
 	}
 }

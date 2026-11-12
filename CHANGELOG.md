@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Multi-word font families containing digits (e.g. `[font:Source Sans 3]`)
+  rendered as the fallback font — resvg rejected the unquoted CSS value.
+  Family names are now emitted as quoted CSS values; `--font-family` keeps
+  the raw name.
+
+### Added
+
+- Render now prints a `note:` for config slots (text/images) that have no
+  `{{…}}` placeholder in the template — previously dropped silently.
+
 ### Added
 
 - Duplicate a config from the editor: ⧉ button next to the site select

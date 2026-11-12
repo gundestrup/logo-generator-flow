@@ -45,8 +45,13 @@ func Site(cfg config.Config, outDir string, progress ...func(string)) error {
 	if err != nil {
 		return err
 	}
-	if tb, rerr := os.ReadFile(cfg.Template); rerr == nil && !config.Placeholder.Match(tb) { // #nosec G304 -- config template path
-		fmt.Printf("  note: %s: template has no {{…}} placeholders — renders as-is\n", cfg.Name)
+	if tb, rerr := os.ReadFile(cfg.Template); rerr == nil { // #nosec G304 -- config template path
+		if !config.Placeholder.Match(tb) {
+			fmt.Printf("  note: %s: template has no {{…}} placeholders — renders as-is\n", cfg.Name)
+		} else if unused := unusedSlots(cfg, tb); len(unused) > 0 {
+			fmt.Printf("  note: %s: config slots without a template placeholder (ignored): %s\n",
+				cfg.Name, strings.Join(unused, ", "))
+		}
 	}
 	// #nosec G301 -- generated web assets are intentionally world-readable.
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -116,6 +121,28 @@ func renderRasters(cfg config.Config, wanted map[string]bool, stem, svgPath stri
 	return nil
 }
 
+// unusedSlots returns config slot names with values that the template has
+// no {{…}} placeholder for — they are silently dropped otherwise.
+func unusedSlots(c config.Config, tpl []byte) []string {
+	used := map[string]bool{}
+	for _, m := range config.Placeholder.FindAllStringSubmatch(string(tpl), -1) {
+		used[m[1]] = true
+	}
+	var out []string
+	for k, v := range c.Text {
+		if v.Value != "" && !used[k] {
+			out = append(out, k)
+		}
+	}
+	for k, v := range c.Images {
+		if strings.TrimSpace(v.Src) != "" && !used[k] {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Template loads cfg's SVG template and applies the font override; it
 // does not substitute slots.
 func Template(c config.Config) ([]byte, error) {
@@ -128,8 +155,9 @@ func Template(c config.Config) ([]byte, error) {
 	// <style> blocks. Styled [font:…] runs are emitted later, during
 	// substitution, and keep their own.
 	if c.Render.FontFamily != "" {
-		b = fontFamilyAttr.ReplaceAll(b, []byte(`font-family="`+c.Render.FontFamily+`"`))
-		b = fontFamilyDecl.ReplaceAll(b, []byte(`font-family:`+c.Render.FontFamily))
+		fam := fontFamilyValue(c.Render.FontFamily)
+		b = fontFamilyAttr.ReplaceAll(b, []byte(`font-family="`+fam+`"`))
+		b = fontFamilyDecl.ReplaceAll(b, []byte(`font-family:`+fam))
 	}
 	vals := map[string]string{}
 	for k, v := range c.Text {
@@ -319,7 +347,7 @@ func svgToPNG(c config.Config, resvg, svgPath, pngPath string) error {
 		args = append(args, "--dpi", strconv.FormatFloat(c.Render.DPI, 'f', -1, 64))
 	}
 	if c.Render.FontFamily != "" {
-		args = append(args, "--font-family", c.Render.FontFamily)
+		args = append(args, "--font-family", c.Render.FontFamily) // CLI arg: raw name, not a CSS value
 	}
 	if c.Render.FontsDir != "" {
 		args = append(args, "--use-fonts-dir", c.Render.FontsDir)
@@ -446,6 +474,19 @@ func xmlSafe(s string) string {
 	}, s)
 }
 
+// fontIdent matches a single CSS custom-ident — the only font-family
+// form resvg accepts unquoted. Anything else must be a quoted string:
+// "Source Sans 3" parses as Source/Sans/3, and "3" is not a valid
+// ident, so usvg discards the whole value and silently falls back.
+var fontIdent = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_-]*$`)
+
+func fontFamilyValue(s string) string {
+	if s == "" || fontIdent.MatchString(s) {
+		return s
+	}
+	return "'" + s + "'"
+}
+
 // styledText converts mini-markup into styled <tspan> runs:
 // **bold**, *italic*, __underline__, [#hex]…[/] or [color:#hex]…[/],
 // [font:Name]…[/], [size:NN]…[/]. Unmatched markers pass through literally;
@@ -476,7 +517,7 @@ func styledText(s string) string {
 		attr("font-style", cur.i)
 		attr("text-decoration", cur.u)
 		attr("fill", cur.fill)
-		attr("font-family", cur.fam)
+		attr("font-family", fontFamilyValue(cur.fam))
 		attr("font-size", cur.size)
 		b.WriteString(">")
 		b.WriteString(html.EscapeString(seg))
