@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"example.com/logo-generator/internal/config"
+	"example.com/logo-generator/internal/fonts"
 )
 
 func wrote(path string) {
@@ -118,7 +119,103 @@ func renderRasters(cfg config.Config, wanted map[string]bool, stem, svgPath stri
 			return err
 		}
 	}
+	// Embed @font-face last so resvg sees a clean SVG — it can't parse the
+	// rules anyway and warns per rule.
+	svg, err := os.ReadFile(svgPath) // #nosec G304 -- path built from stem above
+	if err != nil {
+		return err
+	}
+	// #nosec G306 G703 -- svgPath is built from the output stem above;
+	// generated web assets are intentionally world-readable.
+	if err := os.WriteFile(svgPath, embedUsedFonts(svg, cfg), 0o644); err != nil {
+		return fmt.Errorf("embed fonts: %w", err)
+	}
 	return nil
+}
+
+// fontFamilyRef extracts the family names from font-family="…" attributes
+// and font-family:… CSS declarations (capture-group variant of the
+// substitution regexes).
+var fontFamilyRef = regexp.MustCompile(
+	`font-family="([^"]*)"|font-family='([^']*)'|font-family\s*:\s*((?:&[#a-zA-Z0-9]+;|[^;}])*)`)
+
+var fontMIME = map[string]string{
+	".ttf": "font/ttf", ".otf": "font/otf",
+	".woff": "font/woff", ".woff2": "font/woff2",
+}
+
+// embedUsedFonts injects @font-face rules — base64 data URIs — for every
+// font-family the SVG references that resolves under fontsDir or fontFiles.
+// It keeps logo.svg self-contained: browsers show the right font without
+// local installs (resvg rasterization ignores the rules either way).
+func embedUsedFonts(svg []byte, c config.Config) []byte {
+	files := map[string]string{} // family → font file
+	if c.Render.FontsDir != "" {
+		files = fonts.Index(c.Render.FontsDir)
+	}
+	for _, f := range c.Render.FontFiles {
+		if fam := fonts.FamilyName(f); fam != "" {
+			files[fam] = f // explicit config wins over dir scan
+		}
+	}
+	if len(files) == 0 {
+		return svg
+	}
+	used := map[string]bool{}
+	for _, m := range fontFamilyRef.FindAllStringSubmatch(string(svg), -1) {
+		v := m[1]
+		if v == "" {
+			v = m[2]
+		}
+		if v == "" {
+			v = m[3]
+		}
+		for _, fam := range strings.Split(html.UnescapeString(v), ",") {
+			fam = strings.Trim(strings.TrimSpace(fam), `'"`)
+			if files[fam] != "" {
+				used[fam] = true
+			}
+		}
+	}
+	if len(used) == 0 {
+		return svg
+	}
+	names := make([]string, 0, len(used))
+	for fam := range used {
+		names = append(names, fam)
+	}
+	sort.Strings(names)
+	var rules strings.Builder
+	for _, fam := range names {
+		mime := fontMIME[strings.ToLower(filepath.Ext(files[fam]))]
+		if mime == "" {
+			mime = "font/ttf"
+		}
+		raw, err := os.ReadFile(files[fam]) // #nosec G304 -- font path from config/assets dir
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(&rules, `@font-face{font-family:'%s';src:url(data:%s;base64,%s)}`,
+			strings.ReplaceAll(fam, "'", ""), mime, base64.StdEncoding.EncodeToString(raw))
+	}
+	if rules.Len() == 0 {
+		return svg
+	}
+	i := bytes.Index(svg, []byte("<svg"))
+	if i < 0 {
+		return svg
+	}
+	j := bytes.Index(svg[i:], []byte(">"))
+	if j < 0 || svg[i+j-1] == '/' {
+		return svg
+	}
+	j += i
+	out := append([]byte{}, svg[:j+1]...)
+	out = append(out, "<style>"...)
+	out = append(out, rules.String()...)
+	out = append(out, "</style>"...)
+	out = append(out, svg[j+1:]...)
+	return out
 }
 
 // unusedSlots returns config slot names with values that the template has

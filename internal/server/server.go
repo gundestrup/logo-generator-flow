@@ -5,7 +5,6 @@ package server
 import (
 	"context"
 	"embed"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +25,7 @@ import (
 	"unicode/utf8"
 
 	"example.com/logo-generator/internal/config"
+	"example.com/logo-generator/internal/fonts"
 	"example.com/logo-generator/internal/render"
 )
 
@@ -47,6 +47,7 @@ func Mux(h *handler, onShutdown func()) *http.ServeMux {
 	mux.HandleFunc("GET /api/site", h.site)
 	mux.HandleFunc("GET /api/images", h.assetList("assets/images", "images"))
 	mux.HandleFunc("GET /api/fonts", h.assetList("assets/fonts", "fonts"))
+	mux.HandleFunc("GET /fonts.css", h.fontsCSS)
 	mux.HandleFunc("GET /asset/", h.assetFile)
 	mux.HandleFunc("GET /out/", h.outputFile)
 	mux.HandleFunc("POST /api/template-analyze", h.tplAnalyze)
@@ -270,6 +271,28 @@ func (h *handler) preview(w http.ResponseWriter, r *http.Request) {
 var fontFamilyVal = regexp.MustCompile(
 	`font-family="([^"]*)"|font-family='([^']*)'|font-family\s*:\s*((?:&[#a-zA-Z0-9]+;|[^;}])*)`)
 
+// fontsCSS serves @font-face rules for every font under the fonts dir so
+// the editor chrome (pickers, previews) can render each family.
+func (h *handler) fontsCSS(w http.ResponseWriter, _ *http.Request) {
+	dir := h.fontsDir
+	if dir == "" {
+		dir = "assets/fonts"
+	}
+	var rules strings.Builder
+	names := make([]string, 0, 8)
+	for fam := range h.fontIndex(dir) {
+		names = append(names, fam)
+	}
+	sort.Strings(names)
+	for _, fam := range names {
+		fmt.Fprintf(&rules, `@font-face{font-family:'%s';font-display:swap;src:url('/asset/fonts/%s')}`,
+			cssSafe(fam), url.PathEscape(filepath.Base(h.fontIndex(dir)[fam])))
+	}
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	_, _ = io.WriteString(w, rules.String())
+}
+
 // injectFontFaces adds <style>@font-face</style> rules covering every
 // font-family the SVG references — configured files plus anything matching
 // an assets/fonts file — so the browser preview renders custom fonts.
@@ -284,7 +307,7 @@ func (h *handler) injectFontFaces(svg string, cfg config.Config) string {
 		if filepath.ToSlash(filepath.Dir(f)) != filepath.ToSlash(dir) {
 			continue
 		}
-		fam := fontFamilyName(f)
+		fam := fonts.FamilyName(f)
 		if fam == "" {
 			fam = cfg.Render.FontFamily
 		}
@@ -358,104 +381,12 @@ func (h *handler) fontIndex(dir string) map[string]string {
 	if err == nil && h.fontIdx != nil && st.ModTime().Equal(h.fontIdxAt) {
 		return h.fontIdx
 	}
-	idx := map[string]string{}
-	if entries, err := os.ReadDir(dir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-				continue
-			}
-			p := filepath.Join(dir, e.Name())
-			if fam := fontFamilyName(p); fam != "" {
-				idx[fam] = filepath.ToSlash(p)
-			}
-		}
-	}
+	idx := fonts.Index(dir)
 	h.fontIdx, h.fontIdxAt = idx, time.Time{}
 	if err == nil {
 		h.fontIdxAt = st.ModTime()
 	}
 	return idx
-}
-
-// fontFamilyName reads the family name out of a TTF/OTF/TTC sfnt name
-// table (nameID 16 typographic family, else nameID 1). Returns "" for
-// formats it can't parse (WOFF/WOFF2) so callers can fall back.
-func fontFamilyName(path string) string {
-	f, err := os.Open(path) // #nosec G304 -- font files under assets/fonts or from config
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }()
-	b, err := io.ReadAll(io.LimitReader(f, 8<<20))
-	if err != nil || len(b) < 16 {
-		return ""
-	}
-	off := 0
-	if string(b[:4]) == "ttcf" {
-		off = int(binary.BigEndian.Uint32(b[12:16]))
-	}
-	if off+6 > len(b) {
-		return ""
-	}
-	numTables := int(binary.BigEndian.Uint16(b[off+4:]))
-	for i := 0; i < numTables; i++ {
-		rec := off + 12 + 16*i
-		if rec+16 > len(b) {
-			break
-		}
-		if string(b[rec:rec+4]) != "name" {
-			continue
-		}
-		toff := int(binary.BigEndian.Uint32(b[rec+8:]))
-		if toff+6 > len(b) {
-			return ""
-		}
-		count := int(binary.BigEndian.Uint16(b[toff+2:]))
-		strOff := toff + int(binary.BigEndian.Uint16(b[toff+4:]))
-		var fam16, fam1 string
-		for j := 0; j < count; j++ {
-			nr := toff + 6 + 12*j
-			if nr+12 > len(b) {
-				break
-			}
-			nid := binary.BigEndian.Uint16(b[nr+6:])
-			nlen := int(binary.BigEndian.Uint16(b[nr+8:]))
-			noff := strOff + int(binary.BigEndian.Uint16(b[nr+10:]))
-			if noff < 0 || noff+nlen > len(b) {
-				continue
-			}
-			if s := nameString(b[nr:nr+4], b[noff:noff+nlen]); s != "" {
-				if nid == 16 && fam16 == "" {
-					fam16 = s
-				}
-				if nid == 1 && fam1 == "" {
-					fam1 = s
-				}
-			}
-		}
-		if fam16 != "" {
-			return fam16
-		}
-		return fam1
-	}
-	return ""
-}
-
-// nameString decodes a name-table record per its platform: Windows (3) and
-// Unicode (0) store UTF-16BE; Macintosh (1) is ASCII-compatible.
-func nameString(platform []byte, raw []byte) string {
-	pid := binary.BigEndian.Uint16(platform[:2])
-	if pid == 3 || pid == 0 {
-		rs := make([]rune, 0, len(raw)/2)
-		for i := 0; i+2 <= len(raw); i += 2 {
-			rs = append(rs, rune(binary.BigEndian.Uint16(raw[i:])))
-		}
-		return string(rs)
-	}
-	if pid == 1 {
-		return string(raw)
-	}
-	return ""
 }
 
 func (h *handler) renderAll(w http.ResponseWriter, r *http.Request) {
@@ -587,7 +518,7 @@ func (h *handler) assetList(dir, key string) http.HandlerFunc {
 					"path": filepath.ToSlash(filepath.Join(dir, e.Name())),
 					"svg":  strings.HasSuffix(strings.ToLower(e.Name()), ".svg"),
 				}
-				if fam := fontFamilyName(filepath.Join(dir, e.Name())); fam != "" {
+				if fam := fonts.FamilyName(filepath.Join(dir, e.Name())); fam != "" {
 					it["family"] = fam
 				}
 				items = append(items, it)

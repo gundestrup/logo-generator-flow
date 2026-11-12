@@ -18,6 +18,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Render now prints a `note:` for config slots (text/images) that have no
   `{{…}}` placeholder in the template — previously dropped silently.
+- Exported `logo.svg` embeds `@font-face` rules (base64 data URIs) for the
+  font families it references — self-contained output that renders
+  correctly in browsers without local font installs. Applied after
+  rasterization so resvg sees a clean document.
+- Font pickers render each option in its own glyphs plus a live
+  `AaBbGg 123` preview next to the select (`GET /fonts.css` serves the
+  faces; `internal/fonts` shares the sfnt family-name parser).
+- Image editor: `recolor` toggle — unchecked keeps the image's original
+  colors (no `fill`/`stroke` keys emitted) instead of forcing defaults.
+
+### Fixed
+
+- Slot editor size input was nearly invisible (dark-on-dark, unlabelled)
+  and cleared itself after applying — now a visibly bordered control that
+  keeps the last value.
 
 ### Added
 

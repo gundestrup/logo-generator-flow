@@ -61,6 +61,7 @@ document.addEventListener("alpine:init", () => {
       text: "",
       color: "#ffffff",
       src: "",
+      recolor: false,
       fill: "#ffffff",
       stroke: "#000000",
     },
@@ -276,7 +277,7 @@ document.addEventListener("alpine:init", () => {
       } else {
         o.images ||= {};
         o.images[this.draft.slot] =
-          v.fill || v.stroke
+          v.recolor && (v.fill || v.stroke)
             ? {
                 src: v.src,
                 ...(v.fill && { fill: v.fill }),
@@ -325,6 +326,7 @@ document.addEventListener("alpine:init", () => {
             }
           : {
               src: this.imgSrc(cur),
+              recolor: !!(cur?.fill || cur?.stroke),
               fill: cur?.fill || "#ffffff",
               stroke: cur?.stroke || "#000000",
             };
@@ -388,7 +390,6 @@ document.addEventListener("alpine:init", () => {
     },
     swSize() {
       const n = parseFloat(this.mkSize);
-      this.mkSize = "";
       if (!n || n <= 0) return;
       this.sw(`[size:${n}]`, "[/]");
     },
@@ -396,6 +397,12 @@ document.addEventListener("alpine:init", () => {
       return [
         ...new Set(this.fonts.map((f) => f.family).filter(Boolean)),
       ].sort();
+    },
+    fontStyle(f) {
+      return f ? `font-family:'${String(f).replace(/'/g, "")}'` : "";
+    },
+    fontFamilyFor(path) {
+      return this.fonts.find((f) => f.path === path)?.family || "";
     },
     fontLabel(f) {
       return `${f.name}${f.family ? ` — ${f.family}` : ""}`;

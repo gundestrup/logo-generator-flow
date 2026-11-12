@@ -495,45 +495,6 @@ func TestListenWhenFree(t *testing.T) {
 	}
 }
 
-// makeTestFont builds a minimal sfnt binary (TTF) carrying one Windows
-// name record so fontFamilyName has a deterministic fixture.
-func makeTestFont(t *testing.T, dir, name, family string) string {
-	t.Helper()
-	raw := []byte(family)
-	utf := make([]byte, 0, len(raw)*2)
-	for _, r := range family {
-		// #nosec G115 -- fixture family is ASCII, r < 0x10000 by construction.
-		utf = append(utf, byte(r>>8), byte(r))
-	}
-	nt := []byte{0, 0, 0, 1, 0, 18}         // format, count=1, stringOffset=18
-	nt = append(nt, 0, 3, 0, 1, 4, 9, 0, 1) // platform 3, enc 1, lang 0x0409, nameID 1
-	// #nosec G115 -- fixture strings stay under 256 bytes.
-	nt = append(nt, byte(len(utf)>>8), byte(len(utf)), 0, 0)
-	nt = append(nt, utf...)
-	hdr := []byte{0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0} // sfnt 1.0, 1 table
-	// #nosec G115 -- fixture table stays under 64KiB.
-	rec := append([]byte("name"), 0, 0, 0, 0, 0, 0, 0, 28, 0, 0, byte(len(nt)>>8), byte(len(nt)))
-	p := filepath.Join(dir, name)
-	if err := os.WriteFile(p, append(append(hdr, rec...), nt...), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return p
-}
-
-func TestFontFamilyName(t *testing.T) {
-	dir := t.TempDir()
-	if got := fontFamilyName(makeTestFont(t, dir, "x.ttf", "TestFam")); got != "TestFam" {
-		t.Fatalf("got %q", got)
-	}
-	bad := filepath.Join(dir, "bad.ttf")
-	if err := os.WriteFile(bad, []byte("not a font"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if got := fontFamilyName(bad); got != "" {
-		t.Fatalf("garbage font should give empty family, got %q", got)
-	}
-}
-
 func TestPreviewFontFaces(t *testing.T) {
 	h := &handler{configsPath: t.TempDir(), outDir: t.TempDir()}
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><text>hi</text></svg>`
@@ -560,7 +521,7 @@ func TestPreviewFontFaces(t *testing.T) {
 
 func TestFontIndexAndMarkupFaces(t *testing.T) {
 	dir := t.TempDir()
-	makeTestFont(t, dir, "mark.ttf", "MarkFam")
+	testutil.MakeFont(t, dir, "mark.ttf", "MarkFam")
 	h := &handler{configsPath: t.TempDir(), outDir: t.TempDir(), fontsDir: dir}
 	idx := h.fontIndex(dir)
 	if idx["MarkFam"] == "" {
@@ -708,37 +669,8 @@ func TestAssetFileGuardsAndCache(t *testing.T) {
 	}
 }
 
-func TestNameString(t *testing.T) {
-	cases := []struct {
-		platform []byte
-		raw      []byte
-		want     string
-	}{
-		{[]byte{0, 3}, []byte{0, 'A'}, "A"},  // Windows UTF-16BE
-		{[]byte{0, 0}, []byte{0, 'B'}, "B"},  // Unicode UTF-16BE
-		{[]byte{0, 1}, []byte("mac"), "mac"}, // Macintosh ASCII
-		{[]byte{0, 2}, []byte("x"), ""},      // unknown platform
-	}
-	for _, c := range cases {
-		if got := nameString(c.platform, c.raw); got != c.want {
-			t.Errorf("nameString(%v) = %q, want %q", c.platform, got, c.want)
-		}
-	}
-}
-
 func TestCSSSafe(t *testing.T) {
 	if got := cssSafe(`a'b;c{d}\e`); got != "abcde" {
 		t.Fatalf("cssSafe = %q", got)
-	}
-}
-
-func TestFontFamilyNameNonFont(t *testing.T) {
-	bad := filepath.Join(t.TempDir(), "n.txt")
-	testutil.WriteFile(t, bad, "not a font")
-	if got := fontFamilyName(bad); got != "" {
-		t.Fatalf("non-font family = %q", got)
-	}
-	if got := fontFamilyName(filepath.Join(t.TempDir(), "missing.ttf")); got != "" {
-		t.Fatal("missing file should give empty family")
 	}
 }

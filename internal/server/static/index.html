@@ -8,6 +8,7 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%230b1220'/%3E%3Cpath d='M4 8h8M8 4v8' stroke='%2338bdf8' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="/static/vendor/bulma.min.css" />
+    <link rel="stylesheet" href="/fonts.css" />
     <script src="/static/app.js" defer></script>
     <script src="/static/vendor/alpine-csp.min.js" defer></script>
     <title>logo-generator — editor</title>
@@ -269,7 +270,14 @@
         min-height: 60px;
       }
       .se-size {
-        width: 4.2em;
+        width: 4.6em;
+        border-color: #3a527a !important;
+        background: #0d1526 !important;
+      }
+      .font-prev {
+        font-size: 15px;
+        color: var(--text);
+        white-space: nowrap;
       }
       #se-body label {
         display: block;
@@ -385,11 +393,19 @@
                   <template x-for="f in fonts" :key="f.path">
                     <option
                       x-bind:value="f.path"
+                      x-bind:style="fontStyle(f.family)"
                       x-text="fontLabel(f)"
                     ></option>
                   </template>
-                </select> </span
-            ></label>
+                </select>
+              </span>
+              <span
+                class="font-prev"
+                x-bind:hidden="!fontSel"
+                x-bind:style="fontStyle(fontFamilyFor(fontSel))"
+                >AaBbGg 123</span
+              ></label
+            >
           </div>
         </section>
         <section class="card">
@@ -545,10 +561,20 @@
                       >
                         <option value="">font…</option>
                         <template x-for="f in fontFamilies()" :key="f">
-                          <option x-bind:value="f" x-text="f"></option>
+                          <option
+                            x-bind:value="f"
+                            x-bind:style="fontStyle(f)"
+                            x-text="f"
+                          ></option>
                         </template>
                       </select>
                     </span>
+                    <span
+                      class="font-prev"
+                      x-bind:hidden="!mkFont"
+                      x-bind:style="fontStyle(mkFont)"
+                      >AaBbGg 123</span
+                    >
                     <input
                       type="number"
                       class="input is-small se-size"
@@ -592,28 +618,43 @@
                     pick…
                   </button>
                   <span id="se-color-wrap" x-show="srcIsSvg()">
-                    <label
-                      >fill
-                      <input
-                        type="color"
-                        x-model="dv.fill"
-                        x-on:input="changed()"
-                    /></label>
-                    <label
-                      >stroke
-                      <input
-                        type="color"
-                        x-model="dv.stroke"
-                        x-on:input="changed()"
-                    /></label>
-                    <button
-                      type="button"
-                      class="button is-small"
-                      title="remove recolor"
-                      x-on:click="resetRecolor()"
+                    <label class="recolor-toggle"
+                      ><input
+                        type="checkbox"
+                        x-model="dv.recolor"
+                        x-on:change="changed()"
+                      />
+                      recolor</label
                     >
-                      ×
-                    </button>
+                    <template x-if="dv.recolor">
+                      <span class="recolor-ctl">
+                        <label
+                          >fill
+                          <input
+                            type="color"
+                            x-model="dv.fill"
+                            x-on:input="changed()"
+                        /></label>
+                        <label
+                          >stroke
+                          <input
+                            type="color"
+                            x-model="dv.stroke"
+                            x-on:input="changed()"
+                        /></label>
+                        <button
+                          type="button"
+                          class="button is-small"
+                          title="reset recolor defaults"
+                          x-on:click="resetRecolor()"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    </template>
+                    <span class="orig-hint" x-show="!dv.recolor"
+                      >original colors</span
+                    >
                   </span>
                 </div>
               </template>

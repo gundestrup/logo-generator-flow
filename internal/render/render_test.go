@@ -529,3 +529,31 @@ func TestUnusedSlots(t *testing.T) {
 		t.Fatalf("unusedSlots = %v, want %v", got, want)
 	}
 }
+
+func TestEmbedUsedFonts(t *testing.T) {
+	dir := t.TempDir()
+	fdir := filepath.Join(dir, "fonts")
+	testutil.MustMkdir(t, fdir)
+	testutil.MakeFont(t, fdir, "used.ttf", "EmbedFam")
+	testutil.MakeFont(t, fdir, "other.ttf", "UnusedFam")
+
+	c := config.Config{Render: config.RenderConfig{FontsDir: fdir}}
+	svg := []byte(`<svg xmlns="x"><text font-family="EmbedFam">hi</text></svg>`)
+	out := string(embedUsedFonts(svg, c))
+	if !strings.Contains(out, `@font-face{font-family:'EmbedFam';src:url(data:font/ttf;base64,`) {
+		t.Fatalf("used font not embedded:\n%s", out[:300])
+	}
+	if strings.Contains(out, "UnusedFam") {
+		t.Fatal("unreferenced font should not be embedded")
+	}
+	// no fonts dir → passthrough
+	c2 := config.Config{}
+	if got := embedUsedFonts(svg, c2); string(got) != string(svg) {
+		t.Fatal("missing fonts dir should leave svg unchanged")
+	}
+	// self-closing svg → unchanged
+	sc := []byte(`<svg xmlns="x" font-family="EmbedFam"/>`)
+	if got := embedUsedFonts(sc, c); string(got) != string(sc) {
+		t.Fatal("self-closing svg should be unchanged")
+	}
+}
