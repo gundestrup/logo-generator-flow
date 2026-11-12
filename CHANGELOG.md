@@ -112,6 +112,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/static/*` responses now carry `Cache-Control: public, max-age=3600`
   (embedded assets only change with the binary); injected `@font-face`
   rules use `font-display:swap`.
+- Editor column layout: generated card sat 12px higher and inter-column
+  gaps were uneven (Bulma column-padding model vs an unwrapped
+  `card column`) — all three columns are now wrapped `.column`s with a
+  uniform 12px `gap`, `padding:0` (max width) and `.preview` padding
+  trimmed to 6px.
 - Tall templates (e.g. 900×950) were clipped by the `.preview` box's
   hardcoded `aspect-ratio:1200/630` + `contain:size` — the stage had
   the right ratio but its parent didn't. Preview boxes now adopt the
