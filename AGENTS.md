@@ -117,7 +117,7 @@ project context the repo alone does not.
   detail, `jobs` shows background scan state.
   - **HTML analysis & bug finding:** `scan` works on localhost too —
     point it at `make demo` (`:8080`) or `make edit` (`:8181`) after
-    changing `edit/index.html`/`demo/` to catch broken links, 404'd
+    changing `internal/server/static/index.html`/`demo/` to catch broken links, 404'd
     resources, bad response headers and JS/CSS issues before they reach
     a browser. Use it for "how does site X perform" questions or to
     validate rendered output on live pages.

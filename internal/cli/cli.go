@@ -1,30 +1,23 @@
-// Command logo-generator renders per-site SVG logos from JSON configs and
-// exports them via resvg, cwebp and avifenc.
-package main
+// Package cli runs the logo-generator command line: flag parsing,
+// config discovery, per-site rendering, and the browser editor.
+package cli
 
 import (
 	"errors"
+
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
+
+	"example.com/logo-generator/internal/config"
+	"example.com/logo-generator/internal/render"
+	"example.com/logo-generator/internal/server"
 )
 
-// version is the application SemVer, injected at build time via
-// -ldflags "-X main.version=$(APP_VERSION)" (see Makefile). Dev builds
-// report "dev".
-var version = "dev"
-
-func main() {
-	if err := runCLI(os.Args[1:], os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
-	}
-}
-
-func runCLI(argv []string, out io.Writer) error {
+// Run executes the CLI and returns a non-nil error on any failure.
+func Run(argv []string, out io.Writer, version string) error {
 	fs := flag.NewFlagSet("logo-generator", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // caller reports the parse error
 	configsPath := fs.String("configs", "configs", "config file or directory of *.json site configs")
@@ -42,13 +35,13 @@ func runCLI(argv []string, out io.Writer) error {
 		return nil
 	}
 	if *editFlag || *uiFlag {
-		return serveEdit(*configsPath, *outDir, "127.0.0.1:8181")
+		return server.Serve(*configsPath, *outDir, "127.0.0.1:8181", version)
 	}
 	return runAll(*configsPath, *outDir, *sitesFlag)
 }
 
 func runAll(configsPath, outDir, sitesFlag string) error {
-	files, err := configFiles(configsPath)
+	files, err := config.Files(configsPath)
 	if err != nil {
 		return err
 	}
@@ -83,7 +76,7 @@ func siteFilter(sitesFlag string) map[string]bool {
 }
 
 func (r *runResult) render(file, outDir string, filter map[string]bool) {
-	cfg, err := loadConfig(file)
+	cfg, err := config.Load(file)
 	if err != nil {
 		r.failures = append(r.failures, fmt.Sprintf("%s: %v", file, err))
 		return
@@ -100,7 +93,7 @@ func (r *runResult) render(file, outDir string, filter map[string]bool) {
 
 	siteDir := filepath.Join(outDir, cfg.Name)
 	fmt.Printf("== %s (%s)\n", cfg.Name, file)
-	if err := renderSite(cfg, siteDir); err != nil {
+	if err := render.Site(cfg, siteDir); err != nil {
 		r.failures = append(r.failures, fmt.Sprintf("%s: %v", file, err))
 		return
 	}

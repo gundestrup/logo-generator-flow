@@ -5,7 +5,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const dirs = ["demo", "edit", "docs/assets"];
+const dirs = ["demo", "internal/server/static", "docs/assets"];
 const files = dirs.flatMap((d) =>
   readdirSync(d)
     .filter((f) => f.endsWith(".html"))

@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"bytes"
@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"example.com/logo-generator/internal/testutil"
 )
 
 func TestRunVersion(t *testing.T) {
 	var out bytes.Buffer
-	if err := runCLI([]string{"-version"}, &out); err != nil {
+	if err := Run([]string{"-version"}, &out, "test"); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "logo-generator") {
@@ -20,7 +22,7 @@ func TestRunVersion(t *testing.T) {
 
 func TestRunBadFlag(t *testing.T) {
 	var out bytes.Buffer
-	if err := runCLI([]string{"-nope"}, &out); err == nil {
+	if err := Run([]string{"-nope"}, &out, "test"); err == nil {
 		t.Fatal("expected flag parse error")
 	}
 }
@@ -28,7 +30,7 @@ func TestRunBadFlag(t *testing.T) {
 func TestRunMissingConfigs(t *testing.T) {
 	var out bytes.Buffer
 	missing := filepath.Join(t.TempDir(), "nope")
-	if err := runCLI([]string{"-configs", missing}, &out); err == nil {
+	if err := Run([]string{"-configs", missing}, &out, "test"); err == nil {
 		t.Fatal("expected error for missing configs dir")
 	}
 }
@@ -37,7 +39,7 @@ func TestRunMissingConfigs(t *testing.T) {
 func mkConfigsDir(t *testing.T) string {
 	t.Helper()
 	configs := filepath.Join(t.TempDir(), "configs")
-	mustMkdir(t, configs)
+	testutil.MustMkdir(t, configs)
 	return configs
 }
 
@@ -46,8 +48,8 @@ func mkConfigsDir(t *testing.T) string {
 func writeSite(t *testing.T, root, name string) {
 	t.Helper()
 	tpl := filepath.Join(root, name+".svg")
-	writeFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
-	writeFile(t, filepath.Join(root, "configs", name+".json"), `{
+	testutil.WriteFile(t, tpl, `<svg><text>{{text1}}</text></svg>`)
+	testutil.WriteFile(t, filepath.Join(root, "configs", name+".json"), `{
 		"name": "`+name+`",
 		"template": "`+tpl+`",
 		"text": {"text1": "hi"},
@@ -61,7 +63,7 @@ func TestRunRenderSVGOnly(t *testing.T) {
 	writeSite(t, root, "acme")
 	out := filepath.Join(root, "out")
 	var log bytes.Buffer
-	if err := runCLI([]string{"-configs", configs, "-out", out}, &log); err != nil {
+	if err := Run([]string{"-configs", configs, "-out", out}, &log, "test"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(out, "acme", "logo.svg")); err != nil {
@@ -76,7 +78,7 @@ func TestRunSitesFilter(t *testing.T) {
 	writeSite(t, root, "other")
 	out := filepath.Join(root, "out")
 	var log bytes.Buffer
-	if err := runCLI([]string{"-configs", configs, "-out", out, "-sites", "acme"}, &log); err != nil {
+	if err := Run([]string{"-configs", configs, "-out", out, "-sites", "acme"}, &log, "test"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(out, "acme", "logo.svg")); err != nil {
@@ -86,7 +88,7 @@ func TestRunSitesFilter(t *testing.T) {
 		t.Fatal("other should be filtered out")
 	}
 	// Unknown filter → "no sites matched".
-	if err := runCLI([]string{"-configs", configs, "-out", out, "-sites", "ghost"}, &log); err == nil {
+	if err := Run([]string{"-configs", configs, "-out", out, "-sites", "ghost"}, &log, "test"); err == nil {
 		t.Fatal("expected no-sites-matched error")
 	}
 }
@@ -99,9 +101,9 @@ func TestRunSiteFailures(t *testing.T) {
 	var log bytes.Buffer
 
 	// Duplicate site name → collected failure.
-	writeFile(t, filepath.Join(configs, "dup.json"),
+	testutil.WriteFile(t, filepath.Join(configs, "dup.json"),
 		`{"name":"acme","template":"x.svg","output":{"formats":["svg"]}}`)
-	if err := runCLI([]string{"-configs", configs, "-out", out}, &log); err == nil {
+	if err := Run([]string{"-configs", configs, "-out", out}, &log, "test"); err == nil {
 		t.Fatal("duplicate site name should fail the run")
 	}
 	if err := os.Remove(filepath.Join(configs, "dup.json")); err != nil {
@@ -109,8 +111,8 @@ func TestRunSiteFailures(t *testing.T) {
 	}
 
 	// Broken config → loadConfig failure.
-	writeFile(t, filepath.Join(configs, "bad.json"), "{oops")
-	if err := runCLI([]string{"-configs", configs, "-out", out}, &log); err == nil {
+	testutil.WriteFile(t, filepath.Join(configs, "bad.json"), "{oops")
+	if err := Run([]string{"-configs", configs, "-out", out}, &log, "test"); err == nil {
 		t.Fatal("invalid config should fail the run")
 	}
 	if err := os.Remove(filepath.Join(configs, "bad.json")); err != nil {
@@ -118,9 +120,9 @@ func TestRunSiteFailures(t *testing.T) {
 	}
 
 	// Missing template → renderSite failure.
-	writeFile(t, filepath.Join(configs, "dead.json"),
+	testutil.WriteFile(t, filepath.Join(configs, "dead.json"),
 		`{"name":"dead","template":"no.svg","output":{"formats":["svg"]}}`)
-	if err := runCLI([]string{"-configs", configs, "-out", out}, &log); err == nil {
+	if err := Run([]string{"-configs", configs, "-out", out}, &log, "test"); err == nil {
 		t.Fatal("missing template should fail the run")
 	}
 }
@@ -128,7 +130,7 @@ func TestRunSiteFailures(t *testing.T) {
 func TestRunEmptyConfigs(t *testing.T) {
 	configs := mkConfigsDir(t)
 	var log bytes.Buffer
-	if err := runCLI([]string{"-configs", configs, "-out", t.TempDir()}, &log); err == nil {
+	if err := Run([]string{"-configs", configs, "-out", t.TempDir()}, &log, "test"); err == nil {
 		t.Fatal("empty configs dir should report nothing to render")
 	}
 }

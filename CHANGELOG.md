@@ -76,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fonts, templates) now live under `assets/`; config `template` paths,
   the `template-fill` out guard, `.gitignore`, CI, and sonar exclusions
   updated.
-- Editor tests drive the real route table via `editMux` + `ServeHTTP`
+- Editor tests drive the real route table via `server.Mux` + `ServeHTTP`
   (coverage ~83%); a11y labels added to unlabeled inputs.
 
 ### Fixed

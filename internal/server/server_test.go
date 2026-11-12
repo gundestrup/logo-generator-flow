@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -11,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"example.com/logo-generator/internal/config"
+	"example.com/logo-generator/internal/testutil"
 )
 
 const editTestTemplate = `<svg xmlns="http://www.w3.org/2000/svg"><text>{{text1}}</text></svg>`
@@ -22,12 +25,12 @@ const editTestConfig = `{
   "text": {"text1": "Acme Co", "text2": "", "text3": "", "text4": ""}
 }`
 
-func newEditTestHandler(t *testing.T) *editHandler {
+func newEditTestHandler(t *testing.T) *handler {
 	t.Helper()
 	root := t.TempDir()
 	configs := filepath.Join(root, "configs")
-	mustMkdir(t, filepath.Join(root, "assets/templates"))
-	mustMkdir(t, configs)
+	testutil.MustMkdir(t, filepath.Join(root, "assets/templates"))
+	testutil.MustMkdir(t, configs)
 	// #nosec G306 -- test fixture file
 	if err := os.WriteFile(filepath.Join(configs, "acme.json"), []byte(editTestConfig), 0o644); err != nil {
 		t.Fatal(err)
@@ -37,15 +40,15 @@ func newEditTestHandler(t *testing.T) *editHandler {
 		t.Fatal(err)
 	}
 	t.Chdir(root)
-	return &editHandler{configsPath: configs, outDir: filepath.Join(root, "output")}
+	return &handler{configsPath: configs, outDir: filepath.Join(root, "output")}
 }
 
 // doEdit drives requests through the real registered mux so route drift
 // between production and tests can't go unnoticed.
-func doEdit(h *editHandler, method, target, body string) *httptest.ResponseRecorder {
+func doEdit(h *handler, method, target, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	w := httptest.NewRecorder()
-	editMux(h, func() {}).ServeHTTP(w, req)
+	Mux(h, func() {}).ServeHTTP(w, req)
 	return w
 }
 
@@ -154,7 +157,7 @@ func TestEditRenderAll(t *testing.T) {
 func TestOutputFile(t *testing.T) {
 	h := newEditTestHandler(t)
 	// #nosec G301 -- test fixture in a private t.TempDir().
-	mustMkdir(t, filepath.Join(h.outDir, "acme"))
+	testutil.MustMkdir(t, filepath.Join(h.outDir, "acme"))
 	// #nosec G306 -- test fixture in a private t.TempDir().
 	if err := os.WriteFile(filepath.Join(h.outDir, "acme", "logo.svg"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -170,7 +173,7 @@ func TestOutputFile(t *testing.T) {
 func TestEditAssets(t *testing.T) {
 	h := newEditTestHandler(t)
 	// #nosec G301 -- test fixture dir
-	mustMkdir(t, "assets/images")
+	testutil.MustMkdir(t, "assets/images")
 	// #nosec G306 -- test fixture file
 	if err := os.WriteFile("assets/images/badge.svg", []byte("<svg/>"), 0o644); err != nil {
 		t.Fatal(err)
@@ -257,7 +260,7 @@ func TestTemplateFill(t *testing.T) {
 }
 
 func TestEditPing(t *testing.T) {
-	h := &editHandler{configsPath: t.TempDir(), outDir: t.TempDir()}
+	h := &handler{configsPath: t.TempDir(), outDir: t.TempDir()}
 	w := doEdit(h, "GET", "/api/ping", "")
 	if w.Code != 200 {
 		t.Fatalf("status %d", w.Code)
@@ -315,7 +318,7 @@ func TestStopStaleEditorForeign(t *testing.T) {
 }
 
 func TestEditIndex(t *testing.T) {
-	h := &editHandler{configsPath: t.TempDir(), outDir: t.TempDir()}
+	h := &handler{configsPath: t.TempDir(), outDir: t.TempDir()}
 	w := doEdit(h, "GET", "/", "")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "<html") {
 		t.Fatalf("index status %d", w.Code)
@@ -329,7 +332,7 @@ func TestTplAnalyze(t *testing.T) {
 	if err := os.WriteFile(tpl, []byte(svg), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	h := &editHandler{configsPath: dir, outDir: dir}
+	h := &handler{configsPath: dir, outDir: dir}
 	body, _ := json.Marshal(map[string]string{"template": tpl})
 	w := doEdit(h, "POST", "/api/template-analyze", string(body))
 	if w.Code != 200 {
@@ -362,7 +365,7 @@ func TestTplFill(t *testing.T) {
 	if err := os.WriteFile(tpl, []byte(svg), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	h := &editHandler{configsPath: dir, outDir: dir}
+	h := &handler{configsPath: dir, outDir: dir}
 	cfg := `{"name":"s","template":"` + tpl + `","output":{"formats":["svg"]}}`
 	body, _ := json.Marshal(tplFillReq{
 		Config:  json.RawMessage(cfg),
@@ -465,9 +468,9 @@ func TestFontFamilyName(t *testing.T) {
 }
 
 func TestPreviewFontFaces(t *testing.T) {
-	h := &editHandler{configsPath: t.TempDir(), outDir: t.TempDir()}
+	h := &handler{configsPath: t.TempDir(), outDir: t.TempDir()}
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><text>hi</text></svg>`
-	cfg := Config{}
+	cfg := config.Config{}
 	cfg.Render.FontFamily = "Fam"
 	cfg.Render.FontFiles = []string{"assets/fonts/x.ttf"}
 	out := h.injectFontFaces(svg, cfg)
@@ -491,7 +494,7 @@ func TestPreviewFontFaces(t *testing.T) {
 func TestFontIndexAndMarkupFaces(t *testing.T) {
 	dir := t.TempDir()
 	makeTestFont(t, dir, "mark.ttf", "MarkFam")
-	h := &editHandler{configsPath: t.TempDir(), outDir: t.TempDir(), fontsDir: dir}
+	h := &handler{configsPath: t.TempDir(), outDir: t.TempDir(), fontsDir: dir}
 	idx := h.fontIndex(dir)
 	if idx["MarkFam"] == "" {
 		t.Fatalf("fontIndex missing MarkFam: %v", idx)
@@ -499,13 +502,13 @@ func TestFontIndexAndMarkupFaces(t *testing.T) {
 	// A font-family used by the SVG (e.g. a [font:] run or template text)
 	// resolves through the index into an @font-face rule.
 	svg := `<svg xmlns="http://www.w3.org/2000/svg"><tspan font-family="MarkFam">x</tspan></svg>`
-	out := h.injectFontFaces(svg, Config{})
+	out := h.injectFontFaces(svg, config.Config{})
 	if !strings.Contains(out, `font-family:'MarkFam'`) || !strings.Contains(out, `/asset/fonts/mark.ttf`) {
 		t.Fatalf("index font not injected: %s", out)
 	}
 	// Comma fallback lists try each candidate.
 	svg = `<svg xmlns="http://www.w3.org/2000/svg"><tspan font-family="Nope, MarkFam, sans">x</tspan></svg>`
-	if out := h.injectFontFaces(svg, Config{}); !strings.Contains(out, `'MarkFam'`) {
+	if out := h.injectFontFaces(svg, config.Config{}); !strings.Contains(out, `'MarkFam'`) {
 		t.Fatalf("fallback family not resolved: %s", out)
 	}
 }
@@ -521,7 +524,7 @@ func TestServeEditEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
-	go func() { done <- serveEdit(root, root, addr) }()
+	go func() { done <- Serve(root, root, addr, "test") }()
 
 	// Poll ping until the server is up.
 	var ping []byte
@@ -556,7 +559,7 @@ func TestServeEditEndToEnd(t *testing.T) {
 func TestEditShutdownEndpoint(t *testing.T) {
 	called := make(chan struct{}, 1)
 	h := newEditTestHandler(t)
-	mux := editMux(h, func() { called <- struct{}{} })
+	mux := Mux(h, func() { called <- struct{}{} })
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("POST", "/api/shutdown", nil))
 	if w.Code != 200 {
@@ -577,7 +580,7 @@ func TestEditMethodNotAllowed(t *testing.T) {
 }
 
 func TestEditSitesMissingDir(t *testing.T) {
-	h := &editHandler{configsPath: filepath.Join(t.TempDir(), "missing")}
+	h := &handler{configsPath: filepath.Join(t.TempDir(), "missing")}
 	if w := doEdit(h, "GET", "/api/sites", ""); w.Code == 200 {
 		t.Fatal("missing configs dir should fail")
 	}
@@ -622,8 +625,8 @@ func TestEditRenderAllMissingTools(t *testing.T) {
 
 func TestAssetFileGuardsAndCache(t *testing.T) {
 	h := newEditTestHandler(t)
-	mustMkdir(t, filepath.Join("assets", "images"))
-	writeFile(t, filepath.Join("assets", "images", "mark.png"), "x")
+	testutil.MustMkdir(t, filepath.Join("assets", "images"))
+	testutil.WriteFile(t, filepath.Join("assets", "images", "mark.png"), "x")
 	w := doEdit(h, "GET", "/asset/images/mark.png", "")
 	if w.Code != 200 {
 		t.Fatalf("status %d", w.Code)
@@ -664,7 +667,7 @@ func TestCSSSafe(t *testing.T) {
 
 func TestFontFamilyNameNonFont(t *testing.T) {
 	bad := filepath.Join(t.TempDir(), "n.txt")
-	writeFile(t, bad, "not a font")
+	testutil.WriteFile(t, bad, "not a font")
 	if got := fontFamilyName(bad); got != "" {
 		t.Fatalf("non-font family = %q", got)
 	}

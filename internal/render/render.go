@@ -1,4 +1,6 @@
-package main
+// Package render merges a site's text/image slots into its SVG template
+// and rasterizes the result via resvg, cwebp, and avifenc.
+package render
 
 import (
 	"bytes"
@@ -6,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"html"
+
 	"image"
-	"image/color"
 	"image/draw"
 	"image/jpeg"
 	"image/png"
@@ -21,24 +23,21 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-)
 
-var (
-	placeholder = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}`)
-	hexColor    = regexp.MustCompile(`^#?([0-9a-fA-F]{6})$`)
+	"example.com/logo-generator/internal/config"
 )
 
 func wrote(path string) {
 	fmt.Println("  wrote", path)
 }
 
-// renderSite renders one config into outDir as logo.<format>.
-func renderSite(cfg Config, outDir string) error {
-	svg, err := renderTemplate(cfg)
+// Site renders one site: logo.svg plus the formats in cfg.Output.Formats.
+func Site(cfg config.Config, outDir string) error {
+	svg, err := Template(cfg)
 	if err != nil {
 		return err
 	}
-	if tb, rerr := os.ReadFile(cfg.Template); rerr == nil && !placeholder.Match(tb) { // #nosec G304 -- config template path
+	if tb, rerr := os.ReadFile(cfg.Template); rerr == nil && !config.Placeholder.Match(tb) { // #nosec G304 -- config template path
 		fmt.Printf("  note: %s: template has no {{…}} placeholders — renders as-is\n", cfg.Name)
 	}
 	// #nosec G301 -- generated web assets are intentionally world-readable.
@@ -65,7 +64,7 @@ func renderSite(cfg Config, outDir string) error {
 func formatsSet(formats []string) map[string]bool {
 	wanted := map[string]bool{}
 	for _, f := range formats {
-		wanted[normalizeFormat(f)] = true
+		wanted[config.NormalizeFormat(f)] = true
 	}
 	return wanted
 }
@@ -73,7 +72,7 @@ func formatsSet(formats []string) map[string]bool {
 // renderRasters renders the master PNG via resvg and converts it into every
 // requested derived format. The intermediate PNG is removed unless "png" is
 // among the wanted formats.
-func renderRasters(cfg Config, wanted map[string]bool, stem, svgPath string) error {
+func renderRasters(cfg config.Config, wanted map[string]bool, stem, svgPath string) error {
 	tools, err := resolveTools(cfg, wanted)
 	if err != nil {
 		return err
@@ -109,7 +108,9 @@ func renderRasters(cfg Config, wanted map[string]bool, stem, svgPath string) err
 	return nil
 }
 
-func renderTemplate(c Config) ([]byte, error) {
+// Template loads cfg's SVG template and applies the font override; it
+// does not substitute slots.
+func Template(c config.Config) ([]byte, error) {
 	b, err := os.ReadFile(c.Template)
 	if err != nil {
 		return nil, fmt.Errorf("read template: %w", err)
@@ -142,15 +143,15 @@ func renderTemplate(c Config) ([]byte, error) {
 		}
 		vals[k] = html.EscapeString(dataURI)
 	}
-	result := placeholder.ReplaceAllStringFunc(string(b), func(tok string) string {
-		key := placeholder.FindStringSubmatch(tok)[1]
+	result := config.Placeholder.ReplaceAllStringFunc(string(b), func(tok string) string {
+		key := config.Placeholder.FindStringSubmatch(tok)[1]
 		if v, ok := vals[key]; ok {
 			return v
 		}
 		return tok
 	})
 	missingSet := map[string]bool{}
-	for _, m := range placeholder.FindAllStringSubmatch(result, -1) {
+	for _, m := range config.Placeholder.FindAllStringSubmatch(result, -1) {
 		missingSet[m[1]] = true
 	}
 	if len(missingSet) > 0 {
@@ -164,7 +165,7 @@ func renderTemplate(c Config) ([]byte, error) {
 	return []byte(result), nil
 }
 
-func imageDataURI(img ImageSlot) (string, error) {
+func imageDataURI(img config.ImageSlot) (string, error) {
 	source := img.Src
 	if strings.HasPrefix(source, "data:") {
 		if img.Fill != "" || img.Stroke != "" {
@@ -193,7 +194,7 @@ func imageDataURI(img ImageSlot) (string, error) {
 	return "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(b), nil
 }
 
-func recolorDataURI(uri string, img ImageSlot) (string, error) {
+func recolorDataURI(uri string, img config.ImageSlot) (string, error) {
 	const prefix = "data:image/svg+xml;base64,"
 	if !strings.HasPrefix(uri, prefix) {
 		return "", errors.New("recolor requires a base64 image/svg+xml data URI")
@@ -266,7 +267,7 @@ type siteTools struct {
 
 // resolveTools preflights every external tool the requested formats need and
 // reports all missing ones at once, with an install hint.
-func resolveTools(c Config, wanted map[string]bool) (siteTools, error) {
+func resolveTools(c config.Config, wanted map[string]bool) (siteTools, error) {
 	var t siteTools
 	var missing []string
 	needs := []struct {
@@ -298,7 +299,7 @@ func resolveTools(c Config, wanted map[string]bool) (siteTools, error) {
 }
 
 // svgToPNG renders the filled SVG with the resvg CLI.
-func svgToPNG(c Config, resvg, svgPath, pngPath string) error {
+func svgToPNG(c config.Config, resvg, svgPath, pngPath string) error {
 	var args []string
 	if c.Render.Width > 0 {
 		args = append(args, "--width", strconv.Itoa(c.Render.Width))
@@ -339,7 +340,7 @@ func pngToJPEG(src, dst string, quality int, bg string) error {
 	if err != nil {
 		return fmt.Errorf("decode PNG: %w", err)
 	}
-	c, err := parseColor(bg)
+	c, err := config.ParseColor(bg)
 	if err != nil {
 		return err
 	}
@@ -358,7 +359,7 @@ func pngToJPEG(src, dst string, quality int, bg string) error {
 	return out.Close()
 }
 
-func pngToWebP(c Config, cwebp, src, dst string) error {
+func pngToWebP(c config.Config, cwebp, src, dst string) error {
 	args := []string{"-quiet", "-mt"}
 	if c.Render.WebPLossless {
 		args = append(args, "-lossless", "-z", "9", "-exact")
@@ -372,7 +373,7 @@ func pngToWebP(c Config, cwebp, src, dst string) error {
 	return nil
 }
 
-func pngToAVIF(c Config, avifenc, src, dst string) error {
+func pngToAVIF(c config.Config, avifenc, src, dst string) error {
 	args := []string{
 		"--qcolor", strconv.Itoa(c.Render.AVIFQuality),
 		"--qalpha", "100",
@@ -384,23 +385,6 @@ func pngToAVIF(c Config, avifenc, src, dst string) error {
 		return fmt.Errorf("avifenc: %w", err)
 	}
 	return nil
-}
-
-func parseColor(s string) (color.RGBA, error) {
-	m := hexColor.FindStringSubmatch(s)
-	if m == nil {
-		return color.RGBA{}, fmt.Errorf("invalid color %q; use #RRGGBB", s)
-	}
-	n, err := strconv.ParseUint(m[1], 16, 32)
-	if err != nil {
-		return color.RGBA{}, err
-	}
-	return color.RGBA{
-		R: uint8(n >> 16 & 0xff),
-		G: uint8(n >> 8 & 0xff),
-		B: uint8(n & 0xff),
-		A: 255,
-	}, nil
 }
 
 func toolPath(configured, name string) (string, error) {

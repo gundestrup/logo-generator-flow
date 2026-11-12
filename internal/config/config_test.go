@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -6,11 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"example.com/logo-generator/internal/testutil"
 )
 
 func validConfig() Config {
 	c := Config{Name: "site", Template: "t.svg"}
-	applyDefaults(&c)
+	c.ApplyDefaults()
 	return c
 }
 
@@ -67,8 +69,8 @@ func TestNormalizeFormat(t *testing.T) {
 		"gif": "", "": "", "tiff": "",
 	}
 	for in, want := range cases {
-		if got := normalizeFormat(in); got != want {
-			t.Errorf("normalizeFormat(%q) = %q, want %q", in, got, want)
+		if got := NormalizeFormat(in); got != want {
+			t.Errorf("NormalizeFormat(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -82,9 +84,9 @@ func TestConfigFiles(t *testing.T) {
 		}
 	}
 	// #nosec G301 -- test fixture in a private t.TempDir().
-	mustMkdir(t, filepath.Join(dir, "sub.json"))
+	testutil.MustMkdir(t, filepath.Join(dir, "sub.json"))
 
-	files, err := configFiles(dir)
+	files, err := Files(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,16 +96,16 @@ func TestConfigFiles(t *testing.T) {
 	}
 
 	single := filepath.Join(dir, "a.json")
-	files, err = configFiles(single)
+	files, err = Files(single)
 	if err != nil || len(files) != 1 || files[0] != single {
 		t.Fatalf("single file: %v %v", files, err)
 	}
 
 	empty := t.TempDir()
-	if _, err := configFiles(empty); err == nil || !strings.Contains(err.Error(), "no *.json") {
+	if _, err := Files(empty); err == nil || !strings.Contains(err.Error(), "no *.json") {
 		t.Fatalf("empty dir: want no *.json error, got %v", err)
 	}
-	if _, err := configFiles(filepath.Join(dir, "missing")); err == nil {
+	if _, err := Files(filepath.Join(dir, "missing")); err == nil {
 		t.Fatal("missing path: want error")
 	}
 }
@@ -120,7 +122,7 @@ func TestLoadConfig(t *testing.T) {
 	}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := loadConfig(good)
+	cfg, err := Load(good)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +141,7 @@ func TestLoadConfig(t *testing.T) {
 	if err := os.WriteFile(unknown, []byte(`{"name":"x","template":"t","bogus":1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadConfig(unknown); err == nil || !strings.Contains(err.Error(), "bogus") {
+	if _, err := Load(unknown); err == nil || !strings.Contains(err.Error(), "bogus") {
 		t.Fatalf("want unknown-field error, got %v", err)
 	}
 
@@ -148,7 +150,7 @@ func TestLoadConfig(t *testing.T) {
 	if err := os.WriteFile(broken, []byte(`{`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := loadConfig(broken); err == nil {
+	if _, err := Load(broken); err == nil {
 		t.Fatal("want JSON parse error")
 	}
 }
@@ -157,14 +159,14 @@ func TestApplyDefaultsFontsDir(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 	// #nosec G301 -- test fixture in a private t.TempDir().
-	mustMkdir(t, "assets/fonts")
+	testutil.MustMkdir(t, "assets/fonts")
 	var c Config
-	applyDefaults(&c)
+	c.ApplyDefaults()
 	if c.Render.FontsDir != "assets/fonts" {
 		t.Fatalf("FontsDir = %q, want assets/fonts", c.Render.FontsDir)
 	}
 	c2 := Config{Render: RenderConfig{FontsDir: "other"}}
-	applyDefaults(&c2)
+	c2.ApplyDefaults()
 	if c2.Render.FontsDir != "other" {
 		t.Fatalf("explicit fontsDir overridden: %q", c2.Render.FontsDir)
 	}

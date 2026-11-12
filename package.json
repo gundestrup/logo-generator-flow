@@ -10,9 +10,9 @@
   },
   "scripts": {
     "demo:media": "sh scripts/docs-demo.sh",
-    "lint:frontend": "biome lint demo/*.html edit/*.html docs/assets/*.html scripts/*.mjs",
-    "format:check": "prettier --check package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"edit/*.html\" \"docs/assets/*.html\"",
-    "format": "prettier --write package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"edit/*.html\" \"docs/assets/*.html\"",
+    "lint:frontend": "biome lint demo/*.html internal/server/static/*.html docs/assets/*.html scripts/*.mjs",
+    "format:check": "prettier --check package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"internal/server/static/*.html\" \"docs/assets/*.html\"",
+    "format": "prettier --write package.json biome.json README.md CHANGELOG.md \"scripts/**/*.mjs\" \"demo/*.html\" \"internal/server/static/*.html\" \"docs/assets/*.html\"",
     "check": "npm run lint:frontend && npm run lint:dom && npm run format:check",
     "lint:dom": "node scripts/check-dom-refs.mjs"
   },

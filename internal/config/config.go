@@ -1,14 +1,18 @@
-package main
+// Package config defines the per-site JSON schema: strict decoding,
+// defaults, validation, and the {{slot}} template-token contract.
+package config
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -24,10 +28,12 @@ type Config struct {
 	Images   map[string]ImageSlot `json:"images"`
 }
 
+// OutputConfig selects which logo.* formats a site emits.
 type OutputConfig struct {
 	Formats []string `json:"formats"`
 }
 
+// RenderConfig controls rasterization: tools, fonts, background, size.
 type RenderConfig struct {
 	Width           int      `json:"width"`
 	Height          int      `json:"height"`
@@ -51,6 +57,7 @@ type TextSlot struct {
 	Color string
 }
 
+// UnmarshalJSON accepts "text" or {"text","color"} forms.
 func (s *TextSlot) UnmarshalJSON(b []byte) error {
 	if bytes.HasPrefix(bytes.TrimSpace(b), []byte(`"`)) {
 		return json.Unmarshal(b, &s.Value)
@@ -76,6 +83,7 @@ type ImageSlot struct {
 	Stroke string
 }
 
+// UnmarshalJSON accepts "path" or {"src","fill","stroke"} forms.
 func (s *ImageSlot) UnmarshalJSON(b []byte) error {
 	if bytes.HasPrefix(bytes.TrimSpace(b), []byte(`"`)) {
 		return json.Unmarshal(b, &s.Src)
@@ -94,6 +102,7 @@ func (s *ImageSlot) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+// ToolConfig overrides PATH lookup for external converters.
 type ToolConfig struct {
 	Resvg   string `json:"resvg"`
 	CWebP   string `json:"cwebp"`
@@ -104,28 +113,66 @@ var (
 	siteName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 	textSlot = regexp.MustCompile(`^text[1-6]$`)
 	imgSlot  = regexp.MustCompile(`^image[1-6]$`)
+	hexColor = regexp.MustCompile(`^#?([0-9a-fA-F]{6})$`)
+
+	// Placeholder matches {{slot}} tokens in SVG templates.
+	Placeholder = regexp.MustCompile(`\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}`)
 )
 
-func loadConfig(path string) (Config, error) {
+// ValidTextSlot reports whether s is a text1-text6 slot name.
+func ValidTextSlot(s string) bool { return textSlot.MatchString(s) }
+
+// ValidImageSlot reports whether s is an image1-image6 slot name.
+func ValidImageSlot(s string) bool { return imgSlot.MatchString(s) }
+
+// ValidSiteName reports whether s is a legal site/output name.
+func ValidSiteName(s string) bool { return siteName.MatchString(s) }
+
+// ParseColor decodes #RRGGBB (optional #) into an opaque RGBA.
+func ParseColor(s string) (color.RGBA, error) {
+	m := hexColor.FindStringSubmatch(s)
+	if m == nil {
+		return color.RGBA{}, fmt.Errorf("invalid color %q; use #RRGGBB", s)
+	}
+	n, err := strconv.ParseUint(m[1], 16, 32)
+	if err != nil {
+		return color.RGBA{}, err
+	}
+	return color.RGBA{
+		R: uint8(n >> 16 & 0xff),
+		G: uint8(n >> 8 & 0xff),
+		B: uint8(n & 0xff),
+		A: 255,
+	}, nil
+}
+
+// Load reads and validates one site config JSON file.
+func Load(path string) (Config, error) {
 	// #nosec G304 -- config path is operator-supplied CLI input.
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
+	return Parse(b)
+}
+
+// Parse decodes one site config: strict JSON, defaults applied, validated.
+func Parse(b []byte) (Config, error) {
 	var cfg Config
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&cfg); err != nil {
 		return Config{}, fmt.Errorf("invalid JSON: %w", err)
 	}
-	applyDefaults(&cfg)
+	cfg.ApplyDefaults()
 	if err := validateConfig(cfg); err != nil {
 		return Config{}, err
 	}
 	return cfg, nil
 }
 
-func applyDefaults(c *Config) {
+// ApplyDefaults fills unset fields with their documented defaults.
+func (c *Config) ApplyDefaults() {
 	if len(c.Output.Formats) == 0 {
 		c.Output.Formats = []string{"svg", "png", "webp", "avif"}
 	}
@@ -205,7 +252,7 @@ func validColor(s string) error {
 	if s == "" {
 		return nil
 	}
-	_, err := parseColor(s)
+	_, err := ParseColor(s)
 	return err
 }
 
@@ -230,14 +277,14 @@ func validateRender(r RenderConfig) error {
 	if r.Width < 0 || r.Height < 0 {
 		return errors.New("width/height must be >= 0")
 	}
-	_, err := parseColor(r.Background)
+	_, err := ParseColor(r.Background)
 	return err
 }
 
 func validateFormats(formats []string) error {
 	seen := map[string]bool{}
 	for _, f := range formats {
-		norm := normalizeFormat(f)
+		norm := NormalizeFormat(f)
 		if norm == "" {
 			return fmt.Errorf("unknown format: %s", f)
 		}
@@ -249,7 +296,8 @@ func validateFormats(formats []string) error {
 	return nil
 }
 
-func normalizeFormat(f string) string {
+// NormalizeFormat lowercases a format name and maps jpg→jpeg.
+func NormalizeFormat(f string) string {
 	switch strings.ToLower(strings.TrimSpace(f)) {
 	case "svg", "png", "webp", "avif":
 		return strings.ToLower(strings.TrimSpace(f))
@@ -259,9 +307,9 @@ func normalizeFormat(f string) string {
 	return ""
 }
 
-// configFiles returns the *.json files to render: a single file, or every
+// Files returns the *.json files to render: a single file, or every
 // *.json in the given directory, sorted by name.
-func configFiles(path string) ([]string, error) {
+func Files(path string) ([]string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("configs path: %w", err)

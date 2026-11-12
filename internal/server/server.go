@@ -1,7 +1,8 @@
-package main
+// Package server hosts the loopback browser editor (-ui): config CRUD,
+// live SVG preview, template mapping, and on-demand raster renders.
+package server
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"encoding/binary"
@@ -21,17 +22,19 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"example.com/logo-generator/internal/config"
+	"example.com/logo-generator/internal/render"
 )
 
-//go:embed edit/index.html
-var editIndex []byte
+//go:embed static/index.html
+var indexHTML []byte
 
-// serveEdit starts the loopback-only browser editor: pick a site, edit its
-// JSON config, see the rendered SVG update live, and run the full raster
-// pipeline into output/<name>/ on demand.
-// editMux builds the editor's route table; kept separate from serveEdit so
+// Mux builds the editor's route table; kept separate from Serve so
 // tests exercise the real registered routes instead of re-dispatching.
-func editMux(h *editHandler, onShutdown func()) *http.ServeMux {
+// Mux builds the editor's route table; kept separate from Serve so
+// tests exercise the real registered routes instead of re-dispatching.
+func Mux(h *handler, onShutdown func()) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", h.index)
 	mux.HandleFunc("GET /api/sites", h.sites)
@@ -53,10 +56,13 @@ func editMux(h *editHandler, onShutdown func()) *http.ServeMux {
 	return mux
 }
 
-func serveEdit(configsPath, outDir, addr string) error {
-	h := &editHandler{configsPath: configsPath, outDir: outDir}
+// Serve starts the loopback-only browser editor: pick a site, edit its
+// JSON config, see the rendered SVG update live, and run the full raster
+// pipeline into output/<name>/ on demand.
+func Serve(configsPath, outDir, addr, version string) error {
+	h := &handler{configsPath: configsPath, outDir: outDir, version: version}
 	srv := &http.Server{} // #nosec G112 -- loopback dev tool
-	srv.Handler = editMux(h, func() {
+	srv.Handler = Mux(h, func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)
@@ -80,10 +86,10 @@ func serveEdit(configsPath, outDir, addr string) error {
 
 // ping identifies this editor so a newly started instance can recognise (and
 // stop) a stale process still holding the port.
-func (h *editHandler) ping(w http.ResponseWriter, _ *http.Request) {
+func (h *handler) ping(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"app":     "logo-generator",
-		"version": version,
+		"version": h.version,
 		"pid":     os.Getpid(),
 	})
 }
@@ -128,7 +134,8 @@ func listenWhenFree(addr string, timeout time.Duration) (net.Listener, error) {
 	}
 }
 
-type editHandler struct {
+type handler struct {
+	version     string
 	configsPath string
 	outDir      string
 	fontsDir    string // assets/fonts unless overridden (tests)
@@ -147,34 +154,20 @@ func jsonErr(w http.ResponseWriter, err error) {
 	writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 }
 
-func parseConfigBytes(b []byte) (Config, error) {
-	var cfg Config
-	dec := json.NewDecoder(bytes.NewReader(b))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&cfg); err != nil {
-		return cfg, fmt.Errorf("invalid JSON: %w", err)
-	}
-	applyDefaults(&cfg)
-	if err := validateConfig(cfg); err != nil {
-		return cfg, err
-	}
-	return cfg, nil
-}
-
-func (h *editHandler) configPath(name string) (string, error) {
-	if !siteName.MatchString(name) {
+func (h *handler) configPath(name string) (string, error) {
+	if !config.ValidSiteName(name) {
 		return "", fmt.Errorf("invalid site name %q", name)
 	}
 	return filepath.Join(h.configsPath, name+".json"), nil
 }
 
-func (h *editHandler) index(w http.ResponseWriter, _ *http.Request) {
+func (h *handler) index(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(editIndex)
+	_, _ = w.Write(indexHTML)
 }
 
-func (h *editHandler) sites(w http.ResponseWriter, _ *http.Request) {
-	files, err := configFiles(h.configsPath)
+func (h *handler) sites(w http.ResponseWriter, _ *http.Request) {
+	files, err := config.Files(h.configsPath)
 	if err != nil {
 		jsonErr(w, err)
 		return
@@ -186,7 +179,7 @@ func (h *editHandler) sites(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sites": names})
 }
 
-func (h *editHandler) site(w http.ResponseWriter, r *http.Request) {
+func (h *handler) site(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Query().Get("name")
 	path, err := h.configPath(name)
 	if err != nil {
@@ -199,7 +192,7 @@ func (h *editHandler) site(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var tpl string
-	var cfg Config
+	var cfg config.Config
 	if json.Unmarshal(raw, &cfg) == nil && cfg.Template != "" {
 		if b, rerr := os.ReadFile(cfg.Template); rerr == nil { // #nosec G304 -- template path comes from the site config
 			tpl = string(b)
@@ -212,18 +205,18 @@ func (h *editHandler) site(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *editHandler) preview(w http.ResponseWriter, r *http.Request) {
+func (h *handler) preview(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
 		jsonErr(w, err)
 		return
 	}
-	cfg, err := parseConfigBytes(body)
+	cfg, err := config.Parse(body)
 	if err != nil {
 		jsonErr(w, err)
 		return
 	}
-	svg, err := renderTemplate(cfg)
+	svg, err := render.Template(cfg)
 	if err != nil {
 		jsonErr(w, err)
 		return
@@ -238,7 +231,7 @@ var fontFamilyVal = regexp.MustCompile(
 // font-family the SVG references — configured files plus anything matching
 // an assets/fonts file — so the browser preview renders custom fonts.
 // Rasters don't need it: resvg loads the same files via --use-font-file.
-func (h *editHandler) injectFontFaces(svg string, cfg Config) string {
+func (h *handler) injectFontFaces(svg string, cfg config.Config) string {
 	dir := h.fontsDir
 	if dir == "" {
 		dir = "assets/fonts"
@@ -315,7 +308,7 @@ func cssSafe(s string) string {
 
 // fontIndex maps font family → file for everything parseable under dir,
 // rebuilt when the directory's mtime changes (fonts are dropped in ad hoc).
-func (h *editHandler) fontIndex(dir string) map[string]string {
+func (h *handler) fontIndex(dir string) map[string]string {
 	st, err := os.Stat(dir)
 	h.fontMu.Lock()
 	defer h.fontMu.Unlock()
@@ -422,31 +415,31 @@ func nameString(platform []byte, raw []byte) string {
 	return ""
 }
 
-func (h *editHandler) renderAll(w http.ResponseWriter, r *http.Request) {
+func (h *handler) renderAll(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
 		jsonErr(w, err)
 		return
 	}
-	cfg, err := parseConfigBytes(body)
+	cfg, err := config.Parse(body)
 	if err != nil {
 		jsonErr(w, err)
 		return
 	}
-	if err := renderSite(cfg, filepath.Join(h.outDir, cfg.Name)); err != nil {
+	if err := render.Site(cfg, filepath.Join(h.outDir, cfg.Name)); err != nil {
 		jsonErr(w, err)
 		return
 	}
 	files := make([]string, 0, len(cfg.Output.Formats))
 	for _, f := range cfg.Output.Formats {
-		if norm := normalizeFormat(f); norm != "" {
+		if norm := config.NormalizeFormat(f); norm != "" {
 			files = append(files, cfg.Name+"/logo."+norm)
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"files": files})
 }
 
-func (h *editHandler) save(w http.ResponseWriter, r *http.Request) {
+func (h *handler) save(w http.ResponseWriter, r *http.Request) {
 	path, err := h.configPath(r.URL.Query().Get("name"))
 	if err != nil {
 		jsonErr(w, err)
@@ -457,7 +450,7 @@ func (h *editHandler) save(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err)
 		return
 	}
-	if _, err := parseConfigBytes(body); err != nil {
+	if _, err := config.Parse(body); err != nil {
 		jsonErr(w, err)
 		return
 	}
@@ -470,7 +463,7 @@ func (h *editHandler) save(w http.ResponseWriter, r *http.Request) {
 
 // assetList serves the contents of an assets subdirectory as
 // {key: [{name, path, svg}]}; a missing dir yields an empty list.
-func (h *editHandler) assetList(dir, key string) http.HandlerFunc {
+func (h *handler) assetList(dir, key string) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		items := []map[string]any{}
 		if entries, err := os.ReadDir(dir); err == nil {
@@ -502,7 +495,7 @@ func anchoredPath(p string) string {
 }
 
 // assetFile serves files under assets/images or assets/fonts for previews.
-func (h *editHandler) assetFile(w http.ResponseWriter, r *http.Request) {
+func (h *handler) assetFile(w http.ResponseWriter, r *http.Request) {
 	rel := anchoredPath(strings.TrimPrefix(r.URL.Path, "/asset/"))
 	sub := strings.SplitN(rel, "/", 2)
 	if len(sub) != 2 || (sub[0] != "images" && sub[0] != "fonts") {
@@ -515,7 +508,7 @@ func (h *editHandler) assetFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, filepath.Join("assets", rel)) // #nosec G703 -- path is root-anchored Clean + restricted to images|fonts
 }
 
-func (h *editHandler) outputFile(w http.ResponseWriter, r *http.Request) {
+func (h *handler) outputFile(w http.ResponseWriter, r *http.Request) {
 	rel := anchoredPath(strings.TrimPrefix(r.URL.Path, "/out/"))
 	http.ServeFile(w, r, filepath.Join(h.outDir, rel)) // #nosec G703 -- path is root-anchored Clean, cannot escape outDir
 }
@@ -552,7 +545,7 @@ func analyzeTemplate(svg string) []tplElement {
 		if m[1] != "" {
 			e.Tag, e.ID = m[1], m[2]
 		}
-		if p := placeholder.FindStringSubmatch(m[0]); p != nil {
+		if p := config.Placeholder.FindStringSubmatch(m[0]); p != nil {
 			e.Slot = p[1]
 		}
 		switch e.Tag {
@@ -654,13 +647,13 @@ func templateFill(svg string, mapping map[string]string) (string, error) {
 	return svg, nil
 }
 
-func (h *editHandler) tplAnalyze(w http.ResponseWriter, r *http.Request) {
+func (h *handler) tplAnalyze(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 	if err != nil {
 		jsonErr(w, err)
 		return
 	}
-	var cfg Config
+	var cfg config.Config
 	if json.Unmarshal(body, &cfg) != nil || cfg.Template == "" {
 		jsonErr(w, fmt.Errorf("config needs a template path"))
 		return
@@ -686,13 +679,13 @@ type tplFillReq struct {
 	Out     string            `json:"out"`
 }
 
-func (h *editHandler) tplFill(w http.ResponseWriter, r *http.Request) {
+func (h *handler) tplFill(w http.ResponseWriter, r *http.Request) {
 	var req tplFillReq
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		jsonErr(w, fmt.Errorf("invalid JSON: %w", err))
 		return
 	}
-	cfg, err := parseConfigBytes(req.Config)
+	cfg, err := config.Parse(req.Config)
 	if err != nil {
 		jsonErr(w, err)
 		return
@@ -730,7 +723,7 @@ func (h *editHandler) tplFill(w http.ResponseWriter, r *http.Request) {
 
 func templateFillValidate(mapping map[string]string) error {
 	for slot := range mapping {
-		if !textSlot.MatchString(slot) && !imgSlot.MatchString(slot) {
+		if !config.ValidTextSlot(slot) && !config.ValidImageSlot(slot) {
 			return fmt.Errorf("invalid slot %q", slot)
 		}
 	}
