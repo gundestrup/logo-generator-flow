@@ -33,7 +33,13 @@ All raster formats derive from the same PNG, so they are pixel-identical.
   <source srcset="docs/assets/demo/logo-generator-flow.avif" type="image/avif" />
   <img
     src="docs/assets/demo/logo-generator-flow.webp"
-    alt="logo-generator demo: CLI run, config → template → output pipeline, and GUI demo" />
+    alt="logo-generator demo: CLI run, config → template → output pipeline, and the live editor UI" />
+</picture>
+<picture>
+  <source srcset="docs/assets/demo/logo-generator-cli.avif" type="image/avif" />
+  <img
+    src="docs/assets/demo/logo-generator-cli.webp"
+    alt="logo-generator CLI: renders every configs/*.json to output/<name>/logo.* then -ui opens the editor" />
 </picture>
 <!-- markdownlint-enable MD033 -->
 
@@ -231,7 +237,8 @@ make deps-check   # list modules with updates available
 make demo         # render sites + serve GUI demo on :8080
 make edit         # browser editor — live config editing on :8181
                   # (restarting -ui stops a previous instance on the same port)
-make demo-media   # scripts/docs-demo.sh → docs/assets/demo/*.{png,apng,webp,avif,svg}
+make demo-media   # scripts/docs-demo.sh → docs/assets/demo/{logo-generator-flow,logo-generator-cli}.*
+                  # (pipeline mock embeds a real -ui screenshot; CLI anim types a full render)
 make install-hooks # point core.hooksPath at hooks/ — run once per clone
 ```
 

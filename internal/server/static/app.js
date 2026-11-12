@@ -135,9 +135,11 @@ document.addEventListener("alpine:init", () => {
       }
       this.sites = d.sites;
       this.$nextTick(() => {
-        if (d.sites[0]) {
-          this.site = d.sites[0];
-          this.loadSite(d.sites[0]);
+        const q = new URLSearchParams(location.search).get("site");
+        const first = d.sites.includes(q) ? q : d.sites[0];
+        if (first) {
+          this.site = first;
+          this.loadSite(first);
         }
       });
     },

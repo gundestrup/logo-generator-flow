@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `make bump V=x.y.z` (`scripts/bump-version.sh`) — one-command release
+  bump: writes VERSION and copies it into the places that must hold it
+  statically (package.json field, README shields badge, new dated
+  CHANGELOG section), then runs `version-check`. Refuses if the version
+  already has a CHANGELOG section.
+- `?site=<name>` deep-link in the editor — loads a specific site on
+  open instead of the alphabetically first one.
+- `scripts/capture-editor.mjs` — CDP capture of the live `-ui` editor:
+  picks the first site with region overlays, clicks a text region, and
+  screenshots it. `docs/assets/demo.html` now embeds this real capture
+  instead of a hand-drawn browser mock, so the demo can't drift from
+  the actual UI.
+- `docs/assets/cli.html` + `logo-generator-cli.*` media — a second
+  animation showing a full `./logo-generator` render and the `-ui`
+  launch, typed out progressively (10 frames @ 1.2fps).
+
 ## [0.2.0] - 2026-11-12
 
 ### Added

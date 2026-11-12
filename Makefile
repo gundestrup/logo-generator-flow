@@ -4,7 +4,7 @@ BIN := logo-generator
 
 .PHONY: all build run test test-race cover fmt fmt-check vet lint semgrep \
 	vuln-check deps-check demo demo-media edit frontend-check version-check \
-	install-hooks quality ready clean
+	install-hooks quality ready clean bump
 
 build:
 	go build -trimpath -buildvcs=false -ldflags="$(LDFLAGS)" -o $(BIN) ./cmd/logo-generator
@@ -87,6 +87,12 @@ frontend-check:
 # VERSION vs package.json vs latest CHANGELOG section.
 version-check:
 	sh scripts/check-version.sh
+
+# Release bump: make bump V=x.y.z — writes VERSION + package.json +
+# README badge + CHANGELOG section, then runs version-check.
+bump:
+	@test -n "$(V)" || { echo "usage: make bump V=x.y.z" >&2; exit 1; }
+	sh scripts/bump-version.sh $(V)
 
 install-hooks:
 	git config core.hooksPath hooks

@@ -99,6 +99,10 @@
         border-radius: 8px;
         overflow: hidden;
       }
+      .shot {
+        display: block;
+        width: 100%;
+      }
       .bar {
         display: flex;
         align-items: center;
@@ -237,43 +241,11 @@
         <div class="bar">
           <i></i><i></i><i></i><span class="url">127.0.0.1:8181</span>
         </div>
-        <div class="cols">
-          <div class="col">
-            <div class="mini">
-              <b>global settings</b><code>font: Protomolecule</code>
-            </div>
-            <div class="mini">
-              <b>config</b><code>{"name":"acme", "text1":"…"}</code>
-            </div>
-          </div>
-          <div class="col">
-            <div class="mini">
-              <b>template · map… outlines</b
-              ><img src="../../assets/templates/logo.svg" alt="" />
-            </div>
-            <div class="mini">
-              <b>edit · text1 → Title</b
-              ><code
-                ><span class="btn">B</span> <span class="btn">i</span>
-                <span class="btn">u</span> <span class="btn">font…</span>
-                <span class="btn">size</span><br />
-                "Acme [size:18]Corp[/]"</code
-              >
-            </div>
-            <div class="mini">
-              <b>template regions</b><code>Title → text1 · Mark → image1</code>
-            </div>
-          </div>
-          <div class="col">
-            <div class="mini">
-              <b>generated · backdrop</b
-              ><img src="../../output/acme/logo.png" alt="" />
-            </div>
-            <div class="mini">
-              <b>click region → draft → apply → save</b>
-            </div>
-          </div>
-        </div>
+        <img
+          class="shot"
+          src="../../data/demo-frames/editor.png"
+          alt="live capture of the -ui editor: settings/config · template with region outlines + edit card · generated preview"
+        />
       </div>
     </section>
     <script>

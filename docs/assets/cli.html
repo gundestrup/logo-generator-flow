@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>logo-generator — CLI demo</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 18px 24px;
+        background: #0b1220;
+      }
+      .win {
+        background: #0a0f1a;
+        border: 1px solid #24334f;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: #0d1526;
+        padding: 7px 12px;
+        font-size: 10px;
+        color: #8ba0c2;
+      }
+      .bar i {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #334155;
+        display: inline-block;
+      }
+      .bar i:nth-child(1) {
+        background: #f87171;
+      }
+      .bar i:nth-child(2) {
+        background: #fbbf24;
+      }
+      .bar i:nth-child(3) {
+        background: #34d399;
+      }
+      .bar b {
+        font-weight: 500;
+        margin-left: 6px;
+      }
+      .term {
+        font:
+          12.5px/1.55 ui-monospace,
+          Menlo,
+          monospace;
+        padding: 14px 18px 18px;
+        white-space: pre-wrap;
+        color: #c9d6ea;
+        min-height: 430px;
+      }
+      .p {
+        color: #38bdf8;
+      }
+      .ok {
+        color: #34d399;
+      }
+      .dim {
+        color: #64748b;
+      }
+      .cur {
+        display: inline-block;
+        width: 7px;
+        height: 14px;
+        background: #38bdf8;
+        vertical-align: -2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="win">
+      <div class="bar"><i></i><i></i><i></i><b>logo-generator — zsh</b></div>
+      <div class="term" id="t"></div>
+    </div>
+    <script>
+      const step = Number(
+        new URLSearchParams(location.search).get("step") || 0,
+      );
+      const cmd1 = "./logo-generator";
+      const cmd2 = "./logo-generator -ui";
+      const out1 = [
+        ["== acme (configs/acme.json)", ""],
+        ["  wrote output/acme/logo.svg", "ok"],
+        ["  wrote output/acme/logo.png", "ok"],
+        ["  wrote output/acme/logo.webp", "ok"],
+        ["  wrote output/acme/logo.avif", "ok"],
+        [
+          "== Borg-collective (configs/borg-collective_website-vitals-flow.json)",
+          "",
+        ],
+        ["  wrote output/Borg-collective/logo.svg", "ok"],
+        ["  wrote output/Borg-collective/logo.png", "ok"],
+        ["  wrote output/Borg-collective/logo.webp", "ok"],
+        ["  wrote output/Borg-collective/logo.avif", "ok"],
+        ["== borg (configs/borg.json)", ""],
+        ["  wrote output/borg/logo.svg", "ok"],
+        ["  wrote output/borg/logo.png", "ok"],
+        ["  wrote output/borg/logo.webp", "ok"],
+        ["  wrote output/borg/logo.avif", "ok"],
+        ["== northwind (configs/northwind.json)", ""],
+        ["  wrote output/northwind/logo.svg", "ok"],
+        ["  wrote output/northwind/logo.png", "ok"],
+        ["  wrote output/northwind/logo.jpg", "ok"],
+        ["done: 4 site(s) → output/<name>/logo.*", "p"],
+      ];
+      // step → state: [cmdChars of cmd1, out1 lines shown, cmdChars of cmd2,
+      // out2 shown]
+      const steps = [
+        [0, 0, 0, 0], // 0: bare prompt
+        [7, 0, 0, 0], // 1: typing cmd1
+        [99, 0, 0, 0], // 2: cmd1 done
+        [99, 5, 0, 0], // 3: acme block
+        [99, 10, 0, 0], // 4: Borg-collective block
+        [99, 15, 0, 0], // 5: borg block
+        [99, 20, 0, 0], // 6: northwind + done
+        [99, 20, 12, 0], // 7: typing cmd2 (-ui)
+        [99, 20, 99, 0], // 8: cmd2 done
+        [99, 20, 99, 1], // 9: editor line
+      ];
+      const [c1, n1, c2, n2] = steps[Math.min(step, steps.length - 1)];
+      let h = "";
+      const prompt = () => `<span class="p">$</span> `;
+      h += prompt() + cmd1.slice(0, c1);
+      if (n1 === 0) h += `<span class="cur"></span>`;
+      for (const [txt, cls] of out1.slice(0, n1))
+        h += `\n<span class="${cls}">${txt}</span>`;
+      if (c2 > 0) {
+        h += "\n" + prompt() + cmd2.slice(0, c2);
+        if (n2 === 0) h += `<span class="cur"></span>`;
+      }
+      if (n2 > 0)
+        h +=
+          `\n<span class="ok">editor: http://127.0.0.1:8181/</span>\n` +
+          prompt() +
+          `<span class="cur"></span>`;
+      document.getElementById("t").innerHTML = h;
+    </script>
+  </body>
+</html>
