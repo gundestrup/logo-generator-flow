@@ -59,6 +59,14 @@ parseColor, slot unmarshalers and recolorSVG.
 - `VERSION` is the app version source; injected via
   `-ldflags -X main.version`. Keep it, `package.json.version`, and the latest
   dated `CHANGELOG.md` section in sync — `make version-check` enforces it.
+- Layout is `cmd/logo-generator` (thin main) + `internal/{cli,config,render,server,testutil}`.
+  The editor UI is `internal/server/static/` embedded via `//go:embed`;
+  vendored bulma/alpine-csp live in `static/vendor/` — refresh with
+  `scripts/vendor-ui.sh`, never CDN. alpine-csp is a restricted parser:
+  no `x-html`, no object-literal/`||` expressions in attributes.
+- `POST /api/render` streams SSE `data:` frames on
+  `Accept: text/event-stream` (progress per written file); plain JSON
+  for other clients — SSE is additive, not a replacement.
 - `.npmrc` pins `min-release-age=7` + `ignore-scripts=true`; Dependabot
   cooldown is 7 days (`default-days`).
 - gosec findings are annotated in place (`// #nosec — reason`), never
