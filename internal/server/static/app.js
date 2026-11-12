@@ -43,6 +43,7 @@ document.addEventListener("alpine:init", () => {
     editOpen: false,
     mapOpen: false,
     modalOpen: false,
+    measuring: false,
     imgList: [],
     filesList: [],
     statusMsg: "",
@@ -52,6 +53,7 @@ document.addEventListener("alpine:init", () => {
     showRegions: true,
     mkColor: "#e45842",
     mkFont: "",
+    mkSize: "",
     draft: null, // {kind, slot, el, value, orig}
     draftKind: "",
     editTitle: "",
@@ -92,6 +94,27 @@ document.addEventListener("alpine:init", () => {
         const el = n && this.regions?.find((x) => x.id === n.id);
         if (el) this.openEditor(el);
       });
+      requestAnimationFrame(() => this.sizeSlotEditor());
+    },
+
+    // The slot editor card has a fixed height — render each variant
+    // (text/image) invisibly and pin the card to the taller one, so
+    // switching kinds never resizes the column.
+    async sizeSlotEditor() {
+      const card = this.$refs.slotEditor;
+      if (!card) return;
+      this.measuring = true;
+      card.style.visibility = "hidden";
+      let max = 0;
+      for (const kind of ["text", "image"]) {
+        this.draftKind = kind;
+        await this.$nextTick();
+        max = Math.max(max, card.offsetHeight);
+      }
+      this.draftKind = "";
+      this.measuring = false;
+      card.style.visibility = "";
+      card.style.height = `${max}px`;
     },
 
     status(msg, ok) {
@@ -254,6 +277,9 @@ document.addEventListener("alpine:init", () => {
     imgSrc(cur) {
       return typeof cur === "string" ? cur : cur?.src || "";
     },
+    srcLabel() {
+      return this.dv.src || "(empty)";
+    },
     srcIsSvg() {
       const src = this.dv.src || "";
       return (
@@ -311,6 +337,7 @@ document.addEventListener("alpine:init", () => {
     closeEditor() {
       this.draft = null;
       this.editOpen = false;
+      this.draftKind = "";
       document.querySelectorAll(".region.sel").forEach((r) => {
         r.classList.remove("sel");
       });
@@ -346,6 +373,12 @@ document.addEventListener("alpine:init", () => {
       if (!fam) return;
       this.mkFont = "";
       this.sw(`[font:${fam}]`, "[/]");
+    },
+    swSize() {
+      const n = parseFloat(this.mkSize);
+      this.mkSize = "";
+      if (!n || n <= 0) return;
+      this.sw(`[size:${n}]`, "[/]");
     },
     fontFamilies() {
       return [

@@ -45,3 +45,4 @@ assets/images/*
 !assets/images/badge.svg
 !assets/images/mark.svg
 !assets/images/photo.png
+/bin/

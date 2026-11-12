@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Slot editor is a permanent card pinned below the template card (3px
+  gap): fixed height measured at startup as the taller of the text and
+  image variants, a placeholder hint when nothing is selected, and the
+  card never resizes the column when switching editor kinds.
+- Font-size control in the slot editor's inline-markup toolbar: a small
+  number input wraps the textarea selection in `[size:N]…[/]` (the
+  mini-markup tag the renderer already supports).
 - Browser editor (`-edit` / `make edit`): loopback UI on
   `http://127.0.0.1:8181/` (flag: `-ui`, alias `-edit`) with a live JSON
   editor, template preview, debounced SVG render, "render all formats"
@@ -118,6 +125,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `card column`) — all three columns are now wrapped `.column`s with a
   uniform 12px `gap`, `padding:0` (max width) and `.preview` padding
   trimmed to 6px.
+- Text regions rendered as ~1% dots — `analyzeTemplate` only extracted
+  x/y for `<text>` (from `matrix()`), leaving w/h at 0. Position now
+  also honors `translate()` and `x=`/`y=` attrs, and w/h are estimated
+  from `font-size` × text length (with `text-anchor` and baseline
+  adjustments), so text regions get real clickable boxes that highlight
+  green on selection like image regions.
 - Tall templates (e.g. 900×950) were clipped by the `.preview` box's
   hardcoded `aspect-ratio:1200/630` + `contain:size` — the stage had
   the right ratio but its parent didn't. Preview boxes now adopt the

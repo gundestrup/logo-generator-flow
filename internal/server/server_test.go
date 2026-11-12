@@ -252,8 +252,12 @@ func TestAnalyzeTemplate(t *testing.T) {
 	if els[0].ID != "Box" || els[0].X != 10 || els[0].Y != 20 || els[0].W != 60 || els[0].H != 60 {
 		t.Fatalf("box = %+v", els[0])
 	}
-	if els[1].ID != "Lbl" || els[1].X != 100 || els[1].Y != 200 {
-		t.Fatalf("text = %+v", els[1])
+	got := els[1]
+	near := func(a, b float64) bool { d := a - b; return d > -0.01 && d < 0.01 }
+	if got.ID != "Lbl" || got.Tag != "text" ||
+		!near(got.X, 100) || !near(got.Y, 200-24*0.9) ||
+		!near(got.W, 24) || !near(got.H, 28.8) {
+		t.Fatalf("text = %+v", got)
 	}
 }
 

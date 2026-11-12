@@ -125,8 +125,23 @@
         flex: 1;
         overflow: auto;
       }
-      .column .card:last-child {
+      .column > .card:last-child {
         flex: 1;
+      }
+      .tpl-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        flex: 1;
+        min-height: 0;
+      }
+      #slot-editor {
+        flex: none;
+      }
+      .se-empty {
+        color: var(--dim);
+        font-size: 12px;
+        padding: 8px 2px;
       }
       #tpl-card {
         flex: 1;
@@ -253,6 +268,9 @@
       #slot-editor .textarea {
         min-height: 60px;
       }
+      .se-size {
+        width: 4.2em;
+      }
       #se-body label {
         display: block;
         margin: 8px 0 2px;
@@ -367,128 +385,6 @@
             ></label>
           </div>
         </section>
-        <section class="card" id="slot-editor" x-show="editOpen" hidden>
-          <div class="h2">
-            edit <code x-text="editTitle"></code>
-            <span class="h2-tools">
-              <button
-                type="button"
-                class="button is-small is-primary"
-                x-show="isDirty()"
-                x-on:click="applyEdit()"
-              >
-                apply
-              </button>
-              <button
-                type="button"
-                class="button is-small"
-                title="close"
-                x-on:click="closeEditor()"
-              >
-                ×
-              </button>
-            </span>
-          </div>
-          <div class="body" id="se-body">
-            <template x-if="draftKind === 'text'">
-              <div>
-                <div>
-                  <button
-                    type="button"
-                    class="button is-small"
-                    x-on:click="sw('**','**')"
-                  >
-                    <b>B</b>
-                  </button>
-                  <button
-                    type="button"
-                    class="button is-small"
-                    x-on:click="sw('*','*')"
-                  >
-                    <i>I</i>
-                  </button>
-                  <button
-                    type="button"
-                    class="button is-small"
-                    x-on:click="sw('__','__')"
-                  >
-                    <u>U</u>
-                  </button>
-                  <input
-                    type="color"
-                    x-model="mkColor"
-                    x-on:input="swColor()"
-                    title="inline color"
-                    aria-label="inline color"
-                  />
-                  <span class="select is-small">
-                    <select
-                      x-model="mkFont"
-                      x-on:change="swFont()"
-                      aria-label="inline font"
-                    >
-                      <option value="">font…</option>
-                      <template x-for="f in fontFamilies()" :key="f">
-                        <option x-bind:value="f" x-text="f"></option>
-                      </template>
-                    </select>
-                  </span>
-                </div>
-                <label
-                  >text
-                  <textarea
-                    class="textarea"
-                    x-ref="seText"
-                    x-model="dv.text"
-                    x-on:input="changed()"
-                    spellcheck="false"
-                  ></textarea>
-                </label>
-                <label
-                  >color
-                  <input type="color" x-model="dv.color" x-on:input="changed()"
-                /></label>
-              </div>
-            </template>
-            <template x-if="draftKind === 'image'">
-              <div>
-                <div>image</div>
-                <div id="se-src" x-text="srcLabel()"></div>
-                <button
-                  type="button"
-                  class="button is-small"
-                  x-on:click="openPick()"
-                >
-                  pick…
-                </button>
-                <span id="se-color-wrap" x-show="srcIsSvg()">
-                  <label
-                    >fill
-                    <input
-                      type="color"
-                      x-model="dv.fill"
-                      x-on:input="changed()"
-                  /></label>
-                  <label
-                    >stroke
-                    <input
-                      type="color"
-                      x-model="dv.stroke"
-                      x-on:input="changed()"
-                  /></label>
-                  <button
-                    type="button"
-                    class="button is-small"
-                    title="remove recolor"
-                    x-on:click="resetRecolor()"
-                  >
-                    ×
-                  </button>
-                </span>
-              </div>
-            </template>
-          </div>
-        </section>
         <section class="card">
           <div class="h2">config</div>
           <div class="body">
@@ -503,78 +399,220 @@
         </section>
       </div>
       <div class="column">
-        <section class="card" id="tpl-card">
-          <div class="h2">
-            template
-            <span class="h2-tools">
-              <label
-                ><input
-                  type="checkbox"
-                  x-model="showRegions"
-                  x-on:change="drawRegions()"
-                />
-                outlines</label
-              >
-              <button
-                type="button"
-                class="button is-small"
-                x-on:click="openMap()"
-              >
-                map template…
-              </button>
-            </span>
-          </div>
-          <div class="body">
-            <div class="preview" x-ref="tplPreview">
-              <div id="tpl-stage" x-ref="tplStage">
-                <div id="tpl" x-ref="tpl"></div>
-                <div id="tpl-overlay" x-ref="tplOverlay" hidden></div>
+        <div class="tpl-stack">
+          <section class="card" id="tpl-card">
+            <div class="h2">
+              template
+              <span class="h2-tools">
+                <label
+                  ><input
+                    type="checkbox"
+                    x-model="showRegions"
+                    x-on:change="drawRegions()"
+                  />
+                  outlines</label
+                >
+                <button
+                  type="button"
+                  class="button is-small"
+                  x-on:click="openMap()"
+                >
+                  map template…
+                </button>
+              </span>
+            </div>
+            <div class="body">
+              <div class="preview" x-ref="tplPreview">
+                <div id="tpl-stage" x-ref="tplStage">
+                  <div id="tpl" x-ref="tpl"></div>
+                  <div id="tpl-overlay" x-ref="tplOverlay" hidden></div>
+                </div>
               </div>
             </div>
-          </div>
-        </section>
-        <section class="card" id="map-modal" x-show="mapOpen" hidden>
-          <div class="h2">
-            template regions — assign each element a slot
-            <span class="h2-tools">
-              <button
-                type="button"
-                class="button is-small is-primary"
-                x-on:click="mapApply()"
-              >
-                apply
-              </button>
-              <button
-                type="button"
-                class="button is-small"
-                x-on:click="mapCancel()"
-              >
-                cancel
-              </button>
-            </span>
-          </div>
-          <div class="body" id="map-list">
-            <template x-for="slot in allSlots" :key="slot">
-              <div class="map-row">
-                <code x-text="slot"></code> →
-                <span class="select is-small">
-                  <select
-                    x-model="mapAssign[slot]"
-                    x-on:change="mapAssigned(slot)"
-                  >
-                    <option value="">—</option>
-                    <template x-for="e in elsFor(slot)" :key="e.id">
-                      <option
-                        x-bind:value="e.id"
-                        x-text="mapOptLabel(e)"
-                      ></option>
-                    </template>
-                  </select>
-                </span>
+          </section>
+          <section class="card" id="map-modal" x-show="mapOpen" hidden>
+            <div class="h2">
+              template regions — assign each element a slot
+              <span class="h2-tools">
+                <button
+                  type="button"
+                  class="button is-small is-primary"
+                  x-on:click="mapApply()"
+                >
+                  apply
+                </button>
+                <button
+                  type="button"
+                  class="button is-small"
+                  x-on:click="mapCancel()"
+                >
+                  cancel
+                </button>
+              </span>
+            </div>
+            <div class="body" id="map-list">
+              <template x-for="slot in allSlots" :key="slot">
+                <div class="map-row">
+                  <code x-text="slot"></code> →
+                  <span class="select is-small">
+                    <select
+                      x-model="mapAssign[slot]"
+                      x-on:change="mapAssigned(slot)"
+                    >
+                      <option value="">—</option>
+                      <template x-for="e in elsFor(slot)" :key="e.id">
+                        <option
+                          x-bind:value="e.id"
+                          x-text="mapOptLabel(e)"
+                        ></option>
+                      </template>
+                    </select>
+                  </span>
+                </div>
+              </template>
+            </div>
+          </section>
+          <section class="card" id="slot-editor" x-ref="slotEditor">
+            <div class="h2">
+              edit <code x-text="editTitle"></code>
+              <span class="h2-tools">
+                <button
+                  type="button"
+                  class="button is-small is-primary"
+                  x-show="isDirty()"
+                  x-on:click="applyEdit()"
+                >
+                  apply
+                </button>
+                <button
+                  type="button"
+                  class="button is-small"
+                  title="close"
+                  x-show="editOpen"
+                  x-on:click="closeEditor()"
+                >
+                  ×
+                </button>
+              </span>
+            </div>
+            <div class="body" id="se-body">
+              <div class="se-empty" x-show="!editOpen && !measuring">
+                click a template element to edit its slot
               </div>
-            </template>
-          </div>
-        </section>
+              <template x-if="draftKind === 'text'">
+                <div>
+                  <div>
+                    <button
+                      type="button"
+                      class="button is-small"
+                      x-on:click="sw('**','**')"
+                    >
+                      <b>B</b>
+                    </button>
+                    <button
+                      type="button"
+                      class="button is-small"
+                      x-on:click="sw('*','*')"
+                    >
+                      <i>I</i>
+                    </button>
+                    <button
+                      type="button"
+                      class="button is-small"
+                      x-on:click="sw('__','__')"
+                    >
+                      <u>U</u>
+                    </button>
+                    <input
+                      type="color"
+                      x-model="mkColor"
+                      x-on:input="swColor()"
+                      title="inline color"
+                      aria-label="inline color"
+                    />
+                    <span class="select is-small">
+                      <select
+                        x-model="mkFont"
+                        x-on:change="swFont()"
+                        aria-label="inline font"
+                      >
+                        <option value="">font…</option>
+                        <template x-for="f in fontFamilies()" :key="f">
+                          <option x-bind:value="f" x-text="f"></option>
+                        </template>
+                      </select>
+                    </span>
+                    <input
+                      type="number"
+                      class="input is-small se-size"
+                      x-model="mkSize"
+                      x-on:change="swSize()"
+                      min="1"
+                      step="1"
+                      placeholder="size"
+                      title="wrap selection in [size:N]…[/]"
+                      aria-label="inline font-size"
+                    />
+                  </div>
+                  <label
+                    >text
+                    <textarea
+                      class="textarea"
+                      x-ref="seText"
+                      x-model="dv.text"
+                      x-on:input="changed()"
+                      spellcheck="false"
+                    ></textarea>
+                  </label>
+                  <label
+                    >color
+                    <input
+                      type="color"
+                      x-model="dv.color"
+                      x-on:input="changed()"
+                  /></label>
+                </div>
+              </template>
+              <template x-if="draftKind === 'image'">
+                <div>
+                  <div>image</div>
+                  <div id="se-src" x-text="srcLabel()"></div>
+                  <button
+                    type="button"
+                    class="button is-small"
+                    x-on:click="openPick()"
+                  >
+                    pick…
+                  </button>
+                  <span id="se-color-wrap" x-show="srcIsSvg()">
+                    <label
+                      >fill
+                      <input
+                        type="color"
+                        x-model="dv.fill"
+                        x-on:input="changed()"
+                    /></label>
+                    <label
+                      >stroke
+                      <input
+                        type="color"
+                        x-model="dv.stroke"
+                        x-on:input="changed()"
+                    /></label>
+                    <button
+                      type="button"
+                      class="button is-small"
+                      title="remove recolor"
+                      x-on:click="resetRecolor()"
+                    >
+                      ×
+                    </button>
+                  </span>
+                </div>
+              </template>
+            </div>
+          </section>
+        </div>
       </div>
       <div class="column">
         <section class="card">

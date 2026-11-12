@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"example.com/logo-generator/internal/config"
 	"example.com/logo-generator/internal/render"
@@ -573,12 +574,18 @@ type tplElement struct {
 }
 
 var (
-	tplElemRe = regexp.MustCompile(`<(path|rect|image|circle|ellipse)\b[^>]*\bid="([^"]+)"[^>]*>|<text\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</text>`)
-	tplDRe    = regexp.MustCompile(`\bd="([^"]*)"`)
-	tplNumRe  = regexp.MustCompile(`-?\d+\.?\d*`)
-	tplAttrRe = regexp.MustCompile(`\b(x|y|width|height)="(-?\d+\.?\d*)"`)
-	tplXYRe   = regexp.MustCompile(`matrix\(1 0 0 1 (-?\d+\.?\d*) (-?\d+\.?\d*)\)`)
-	tplVBRe   = regexp.MustCompile(`viewBox="(-?[\d.]+)[ ,]+(-?[\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)"`)
+	tplElemRe  = regexp.MustCompile(`<(path|rect|image|circle|ellipse)\b[^>]*\bid="([^"]+)"[^>]*>|<text\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</text>`)
+	tplDRe     = regexp.MustCompile(`\bd="([^"]*)"`)
+	tplNumRe   = regexp.MustCompile(`-?\d+\.?\d*`)
+	tplAttrRe  = regexp.MustCompile(`\b(x|y|width|height)="(-?\d+\.?\d*)"`)
+	tplXYRe    = regexp.MustCompile(`matrix\(1 0 0 1 (-?\d+\.?\d*) (-?\d+\.?\d*)\)`)
+	tplTransRe = regexp.MustCompile(
+		`translate\(\s*(-?\d+\.?\d*)[\s,]+(-?\d+\.?\d*)`)
+	tplFontSizeRe = regexp.MustCompile(`\bfont-size[ \t]*[:=][ \t]*"?(-?\d+\.?\d*)`)
+	tplAnchorRe   = regexp.MustCompile(`\btext-anchor="(middle|end)"`)
+	tplInnerRe    = regexp.MustCompile(`<[^>]*>`)
+	tplEntRe      = regexp.MustCompile(`&[#a-zA-Z0-9]+;`)
+	tplVBRe       = regexp.MustCompile(`viewBox="(-?[\d.]+)[ ,]+(-?[\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)"`)
 )
 
 // analyzeTemplate finds id'd elements and their bounding boxes. For <path>
@@ -610,9 +617,42 @@ func analyzeTemplate(svg string) []tplElement {
 			}
 			e.W, e.H = e.W-e.X, e.H-e.Y
 		case "text":
+			// No bbox exists without rendering — estimate one for the
+			// editor's region overlay: position from matrix()/translate()/
+			// x= y= attrs, size from font-size x text length. The y attr is
+			// the baseline, so the box extends above it.
+			openTag := m[0]
+			if i := strings.IndexByte(openTag, '>'); i >= 0 {
+				openTag = openTag[:i]
+			}
 			if t := tplXYRe.FindStringSubmatch(m[0]); t != nil {
 				e.X, e.Y = atof(t[1]), atof(t[2])
+			} else if t := tplTransRe.FindStringSubmatch(m[0]); t != nil {
+				e.X, e.Y = atof(t[1]), atof(t[2])
+			} else {
+				attrs := map[string]float64{}
+				for _, a := range tplAttrRe.FindAllStringSubmatch(openTag, -1) {
+					attrs[a[1]] = atof(a[2])
+				}
+				e.X, e.Y = attrs["x"], attrs["y"]
 			}
+			size := 24.0
+			if fs := tplFontSizeRe.FindStringSubmatch(m[0]); fs != nil {
+				size = atof(fs[1])
+			}
+			inner := tplEntRe.ReplaceAllString(
+				tplInnerRe.ReplaceAllString(m[4], ""), "x")
+			e.W = float64(utf8.RuneCountInString(strings.TrimSpace(inner))) * size * 0.6
+			e.W = max(e.W, size)
+			e.H = size * 1.2
+			if a := tplAnchorRe.FindStringSubmatch(m[0]); a != nil {
+				if a[1] == "middle" {
+					e.X -= e.W / 2
+				} else {
+					e.X -= e.W
+				}
+			}
+			e.Y -= size * 0.9
 		default:
 			attrs := map[string]float64{}
 			for _, a := range tplAttrRe.FindAllStringSubmatch(m[0], -1) {
