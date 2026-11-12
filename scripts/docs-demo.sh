@@ -23,7 +23,7 @@ for tool in go node ffmpeg img2webp webpinfo; do
 done
 
 # Real outputs feed the mock's <img> tags.
-go build -trimpath -ldflags="-s -w" -o logo-generator .
+go build -trimpath -ldflags="-s -w" -o logo-generator ./cmd/logo-generator
 ./logo-generator
 
 mkdir -p "$frames" "$outdir"
