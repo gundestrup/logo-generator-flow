@@ -99,12 +99,18 @@ document.addEventListener("alpine:init", () => {
 
     // The slot editor card has a fixed height — render each variant
     // (text/image) invisibly and pin the card to the taller one, so
-    // switching kinds never resizes the column.
+    // switching kinds never resizes the column. The measured height is
+    // cached: applying it synchronously on the next load keeps the card
+    // stable without paying two forced layouts before first paint.
     async sizeSlotEditor() {
       const card = this.$refs.slotEditor;
       if (!card) return;
+      const cached = Number(localStorage.getItem("seHeight"));
+      if (cached > 0 && !card.style.height) card.style.height = `${cached}px`;
       this.measuring = true;
       card.style.visibility = "hidden";
+      const pinned = card.style.height;
+      card.style.height = ""; // measure content, not the pinned box
       let max = 0;
       for (const kind of ["text", "image"]) {
         this.draftKind = kind;
@@ -114,7 +120,11 @@ document.addEventListener("alpine:init", () => {
       this.draftKind = "";
       this.measuring = false;
       card.style.visibility = "";
-      card.style.height = `${max}px`;
+      card.style.height = pinned; // cover the gap if measure came back 0
+      if (max > 0) {
+        card.style.height = `${max}px`;
+        localStorage.setItem("seHeight", String(max));
+      }
     },
 
     status(msg, ok) {
