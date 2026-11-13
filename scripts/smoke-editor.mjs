@@ -27,7 +27,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fails = [];
 const check = (name, ok, detail = "") => {
   console.log(
-    `${ok ? "PASS" : "FAIL"}  ${name}${detail ? "  — " + detail : ""}`,
+    `${ok ? "PASS" : "FAIL"}  ${name}${detail ? `  — ${detail}` : ""}`,
   );
   if (!ok) fails.push(name);
 };
@@ -92,7 +92,7 @@ const wsPort = await (async () => {
     await sleep(250);
   }
   throw new Error(
-    "chrome debug port timeout\n" + chromeErr.join("").slice(-2000),
+    `chrome debug port timeout\n${chromeErr.join("").slice(-2000)}`,
   );
 })();
 
@@ -173,7 +173,7 @@ try {
       .then((r) => r.ok)
       .catch(() => false);
     if (up) break;
-    if (i === 59) throw new Error("editor never came up: " + srvOut.join(""));
+    if (i === 59) throw new Error(`editor never came up: ${srvOut.join("")}`);
     await sleep(250);
   }
 

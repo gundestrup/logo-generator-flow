@@ -556,7 +556,7 @@ document.addEventListener("alpine:init", () => {
       const cur = this.templatePath();
       return cur && !this.tplList.some((t) => t.path === cur)
         ? [
-            { name: cur + " (not in assets/templates)", path: cur },
+            { name: `${cur} (not in assets/templates)`, path: cur },
             ...this.tplList,
           ]
         : this.tplList;
