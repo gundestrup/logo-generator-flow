@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Global font row: the dropdown is replaced by the `Aa…` picker button
-  plus an inline preview (`Family  AaBbGg 123`) on one line.
+- Global font row: the dropdown is replaced by an inline preview
+  (`Family  AaBbGg 123`) with the `Aa…` picker button at the right.
 - Font and image modals close on backdrop click and Escape (row clicks
   already closed the font modal).
 

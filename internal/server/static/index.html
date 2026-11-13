@@ -419,20 +419,21 @@
           <div class="body">
             <label
               >font
+              <span
+                class="font-prev"
+                x-bind:hidden="!fontSel"
+                x-bind:style="fontStyle(fontFamilyFor(fontSel))"
+                x-text="selFontLabel() + '  AaBbGg 123'"
+              ></span>
               <button
                 type="button"
                 class="button is-small"
                 title="pick font — every family in its own glyphs"
                 x-on:click="openFontPick('global')"
               >
-                Aa…</button
-              ><span
-                class="font-prev"
-                x-bind:hidden="!fontSel"
-                x-bind:style="fontStyle(fontFamilyFor(fontSel))"
-                x-text="selFontLabel() + '  AaBbGg 123'"
-              ></span
-            ></label>
+                Aa…
+              </button></label
+            >
           </div>
         </section>
         <section class="card">
