@@ -448,6 +448,122 @@ func TestTemplateFillShapes(t *testing.T) {
 	}
 }
 
+// realWorldTemplate mimics what design tools actually emit: a <style> block,
+// defs, comments, <g> nesting, multi-line open tags, paired (non-self-closing)
+// elements, data-* attributes, entities — every historical analyzer bug at once.
+const realWorldTemplate = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700" width="800" height="700">
+  <!-- comment with <text>fake</text> inside -->
+  <style>.cls { fill: #fff; }</style>
+  <defs><linearGradient id="grad"><stop offset="0"/></linearGradient></defs>
+  <g id="layer1" data-name="Layer 1">
+    <rect id="Frame" x="10" y="10" width="200" height="100" rx="4"/>
+    <circle cx="300" cy="60" r="40" fill="#a00"/>
+    <ellipse cx="450" cy="60" rx="50" ry="30"/>
+    <polygon points="10,200 60,220 30,260"/>
+    <line x1="500" y1="50" x2="600" y2="90"/>
+    <path
+      d="M100 300
+         L200 300 L200 400 Z"/>
+    <rect data-id="not-an-id" x="500" y="300" width="40" height="40"/>
+    <rect id="Pair" x="600" y="300" width="30" height="30"></rect>
+    <image id="Logo" x="10" y="500" width="60" height="60" href="data:image/png;base64,AA=="/>
+    <text id="Title" x="100" y="450" font-size="24">Title</text>
+    <text x="50" y="550"
+          font-size="12">
+      Multi
+      <tspan class="cls">line</tspan>
+    </text>
+    <text x="50" y="580" class="cls">plain&amp;text</text>
+  </g>
+</svg>`
+
+func TestAnalyzeRealWorld(t *testing.T) {
+	els := analyzeTemplate(realWorldTemplate)
+	byID := map[string]tplElement{}
+	for _, e := range els {
+		byID[e.ID] = e
+	}
+	// id'd elements keep their ids; defs/gradient/comment-innards are skipped.
+	for _, id := range []string{"Frame", "Pair", "Logo", "Title"} {
+		if _, ok := byID[id]; !ok {
+			t.Fatalf("missing %s: %v", id, keys(byID))
+		}
+	}
+	if _, ok := byID["grad"]; ok {
+		t.Fatal("linearGradient inside <defs> must not be an element")
+	}
+	if _, ok := byID["layer1"]; ok {
+		t.Fatal("<g> groups are not elements")
+	}
+	if _, ok := byID["not-an-id"]; ok {
+		t.Fatal("data-id= must not be treated as an element id")
+	}
+	// ellipse bbox comes from cx/cy/rx/ry.
+	if e := byID["auto-2"]; e.Tag != "ellipse" || e.X != 400 || e.Y != 30 || e.W != 100 || e.H != 60 {
+		t.Fatalf("ellipse = %+v", e)
+	}
+	// multi-line <text> is found, whitespace normalized, font-size read.
+	multi, ok := byID["auto-10"]
+	if !ok || multi.Tag != "text" || multi.Text != "Multi line" {
+		t.Fatalf("multi-line text = %+v", multi)
+	}
+	// entity text: &amp; is counted as one char for the estimate.
+	if e := byID["auto-11"]; e.Tag != "text" || e.Text != "plainxtext" {
+		t.Fatalf("entity text = %+v", e)
+	}
+}
+
+func keys(m map[string]tplElement) []string {
+	out := []string{}
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func TestAnalyzeCRLF(t *testing.T) {
+	crlf := strings.ReplaceAll(realWorldTemplate, "\n", "\r\n")
+	els := analyzeTemplate(crlf)
+	if len(els) != len(analyzeTemplate(realWorldTemplate)) {
+		t.Fatalf("CRLF file: %d elements vs LF", len(els))
+	}
+}
+
+func TestFpStableAcrossReformat(t *testing.T) {
+	// Whitespace-only edits must not invalidate a mapping fingerprint.
+	reformatted := strings.ReplaceAll(realWorldTemplate, `x="10" y="10"`, "x=\n        \"10\"\n        y=\"10\"")
+	reformatted = strings.ReplaceAll(reformatted, "Multi", "Multi")
+	a, b := analyzeTemplate(realWorldTemplate), analyzeTemplate(reformatted)
+	if len(a) != len(b) || a[0].Fp != b[0].Fp {
+		t.Fatalf("fp drifted on reformat: %q vs %q", a[0].Fp, b[0].Fp)
+	}
+}
+
+func TestFillRealWorldPairedTag(t *testing.T) {
+	els := analyzeTemplate(realWorldTemplate)
+	fps := map[string]string{}
+	for _, e := range els {
+		fps[e.ID] = e.Fp
+	}
+	out, err := templateFill(realWorldTemplate, map[string]string{
+		"image1": "Pair",    // paired <rect></rect> — must swallow the close tag
+		"text1":  "auto-10", // multi-line text, auto id
+	}, fps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `<image id="Pair" href="{{image1}}"`) {
+		t.Fatalf("paired tag fill:\n%s", out)
+	}
+	if strings.Contains(out, `</rect>`) {
+		t.Fatalf("close tag survived:\n%s", out)
+	}
+	if !strings.Contains(out, `id="auto-10"`) || !strings.Contains(out, `{{text1}}`) {
+		t.Fatalf("auto text fill:\n%s", out)
+	}
+}
+
 func TestEditPing(t *testing.T) {
 	h := &handler{configsPath: t.TempDir(), outDir: t.TempDir()}
 	w := doEdit(h, "GET", "/api/ping", "")

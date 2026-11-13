@@ -639,8 +639,8 @@ type tplElement struct {
 
 var (
 	tplElemRe   = regexp.MustCompile(`(?s)<(path|rect|image|circle|ellipse|polygon|line)\b[^>]*>|<text\b[^>]*>(.*?)</text>`)
-	tplIDRe     = regexp.MustCompile(`\bid="([^"]+)"`)
-	tplPointsRe = regexp.MustCompile(`\bpoints="([^"]*)"`)
+	tplIDRe     = regexp.MustCompile(`\sid="([^"]+)"`)
+	tplPointsRe = regexp.MustCompile(`\spoints="([^"]*)"`)
 	tplDRe      = regexp.MustCompile(`\bd="([^"]*)"`)
 	tplNumRe    = regexp.MustCompile(`-?\d+\.?\d*`)
 	// Attr names are preceded by whitespace so stroke-width= cannot alias
@@ -649,11 +649,15 @@ var (
 	tplXYRe    = regexp.MustCompile(`matrix\(1 0 0 1 (-?\d+\.?\d*) (-?\d+\.?\d*)\)`)
 	tplTransRe = regexp.MustCompile(
 		`translate\(\s*(-?\d+\.?\d*)[\s,]+(-?\d+\.?\d*)`)
-	tplFontSizeRe = regexp.MustCompile(`\bfont-size[ \t]*[:=][ \t]*"?(-?\d+\.?\d*)`)
+	tplFontSizeRe = regexp.MustCompile(`\bfont-size\s*[:=]\s*"?(-?\d+\.?\d*)`)
 	tplAnchorRe   = regexp.MustCompile(`\btext-anchor="(middle|end)"`)
-	tplInnerRe    = regexp.MustCompile(`<[^>]*>`)
-	tplEntRe      = regexp.MustCompile(`&[#a-zA-Z0-9]+;`)
-	tplVBRe       = regexp.MustCompile(`viewBox="(-?[\d.]+)[ ,]+(-?[\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)"`)
+	// Comments, <style> and <defs> are blanked (length-preserving) before
+	// scanning so markup inside them can't register as mappable elements —
+	// offsets stay valid for splicing into the original document.
+	tplSkipRe  = regexp.MustCompile(`(?s)<!--.*?-->|<style\b[^>]*>.*?</style>|<defs\b[^>]*>.*?</defs>`)
+	tplInnerRe = regexp.MustCompile(`<[^>]*>`)
+	tplEntRe   = regexp.MustCompile(`&[#a-zA-Z0-9]+;`)
+	tplVBRe    = regexp.MustCompile(`viewBox="(-?[\d.]+)[ ,]+(-?[\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)"`)
 )
 
 // tplFingerprint hashes an element's identity — tag + whitespace-normalized
@@ -661,6 +665,8 @@ var (
 // "template was edited since the map modal scanned it".
 func tplFingerprint(tag, openTag, text string) string {
 	norm := strings.Join(strings.Fields(openTag), " ")
+	norm = strings.ReplaceAll(norm, "= ", "=")
+	norm = strings.ReplaceAll(norm, " =", "=")
 	sum := sha256.Sum256([]byte(tag + "|" + norm + "|" + text))
 	return hex.EncodeToString(sum[:])[:12]
 }
@@ -670,6 +676,9 @@ func tplFingerprint(tag, openTag, text string) string {
 // <polygon> the box is min/max over coordinate pairs — exact for absolute
 // outlines like the figure boxes, approximate otherwise.
 func analyzeTemplate(svg string) []tplElement {
+	svg = tplSkipRe.ReplaceAllStringFunc(svg, func(m string) string {
+		return strings.Repeat(" ", len(m))
+	})
 	els := []tplElement{}
 	for i, m := range tplElemRe.FindAllStringSubmatchIndex(svg, -1) {
 		match := svg[m[0]:m[1]]
@@ -799,88 +808,50 @@ func atof(s string) float64 {
 // re-analyzes deterministically.
 func templateFill(svg string, mapping, fps map[string]string) (string, error) {
 	byID := map[string][]string{}
-	ids := []string{}
 	for slot, id := range mapping {
-		if _, seen := byID[id]; !seen {
-			ids = append(ids, id)
-		}
 		byID[id] = append(byID[id], slot)
 	}
-
-	autoOrds := []int{}
-	for _, id := range ids {
-		if strings.HasPrefix(id, "auto-") {
-			n, err := strconv.Atoi(strings.TrimPrefix(id, "auto-"))
-			if err != nil {
-				return "", fmt.Errorf("invalid element id %q", id)
-			}
-			autoOrds = append(autoOrds, n)
-		}
-	}
-	if len(autoOrds) > 0 {
-		auto := map[int]tplElement{}
-		for _, e := range analyzeTemplate(svg) {
-			auto[e.Ord] = e
-		}
-		sort.Sort(sort.Reverse(sort.IntSlice(autoOrds)))
-		for _, n := range autoOrds {
-			id := fmt.Sprintf("auto-%d", n)
-			e, ok := auto[n]
-			if !ok {
-				return "", fmt.Errorf("element %s not found — template changed? reopen map template", id)
-			}
-			if want := fps[id]; want != "" && want != e.Fp {
-				return "", fmt.Errorf("element %s changed since mapping — reopen map template to remap", id)
-			}
-			slots := append([]string(nil), byID[id]...)
-			sort.Strings(slots)
-			if e.Tag == "text" {
-				openTag := svg[e.Loc[0]:e.Loc[1]]
-				openTag = openTag[:strings.IndexByte(openTag, '>')] + ` id="` + id + `">`
-				svg = svg[:e.Loc[0]] + openTag + fillTextInner(svg[e.Inner[0]:e.Inner[1]], slots) + "</text>" + svg[e.Loc[1]:]
-				continue
-			}
-			img := fmt.Sprintf(`<image id="%s" href="{{%s}}" x="%v" y="%v" width="%v" height="%v" preserveAspectRatio="xMidYMid meet"/>`,
-				id, slots[0], e.X, e.Y, e.W, e.H)
-			end := e.Loc[1]
-			if !strings.HasSuffix(strings.TrimSpace(svg[e.Loc[0]:e.Loc[1]]), "/>") {
-				close := "</" + e.Tag + ">"
-				if strings.HasPrefix(svg[end:], close) {
-					end += len(close)
-				}
-			}
-			svg = svg[:e.Loc[0]] + img + svg[end:]
-		}
-		kept := ids[:0]
-		for _, id := range ids {
-			if !strings.HasPrefix(id, "auto-") {
-				kept = append(kept, id)
-			}
-		}
-		ids = kept
-	}
-
-	sort.Strings(ids)
-	for _, id := range ids {
-		slots := byID[id]
-		sort.Strings(slots)
-		re := regexp.MustCompile(`<(path|rect|image|circle|ellipse|polygon|line)\b[^>]*\bid="` + regexp.QuoteMeta(id) + `"[^>]*/>`)
-		tre := regexp.MustCompile(`(?s)(<text\b[^>]*\bid="` + regexp.QuoteMeta(id) + `"[^>]*>)(.*?)(</text>)`)
-		if loc := re.FindStringIndex(svg); loc != nil {
-			var box tplElement
-			for _, e := range analyzeTemplate(svg[loc[0]:loc[1]]) {
-				box = e
-			}
-			img := fmt.Sprintf(`<image id="%s" href="{{%s}}" x="%v" y="%v" width="%v" height="%v" preserveAspectRatio="xMidYMid meet"/>`,
-				id, slots[0], box.X, box.Y, box.W, box.H)
-			svg = svg[:loc[0]] + img + svg[loc[1]:]
+	targets := []tplElement{}
+	seen := map[string]bool{}
+	for _, e := range analyzeTemplate(svg) {
+		if _, ok := byID[e.ID]; !ok || seen[e.ID] {
 			continue
 		}
-		m := tre.FindStringSubmatchIndex(svg)
-		if m == nil {
+		seen[e.ID] = true
+		if want := fps[e.ID]; want != "" && want != e.Fp {
+			return "", fmt.Errorf("element %s changed since mapping — reopen map template to remap", e.ID)
+		}
+		targets = append(targets, e)
+	}
+	for id := range byID {
+		if !seen[id] {
 			return "", fmt.Errorf("element id %q not found in template", id)
 		}
-		svg = svg[:m[4]] + fillTextInner(svg[m[4]:m[5]], slots) + svg[m[5]:]
+	}
+	// Splice right-to-left so earlier offsets stay valid.
+	sort.Slice(targets, func(i, j int) bool { return targets[i].Loc[0] > targets[j].Loc[0] })
+	for _, e := range targets {
+		slots := byID[e.ID]
+		sort.Strings(slots)
+		if e.Tag == "text" {
+			if strings.HasPrefix(e.ID, "auto-") {
+				openTag := svg[e.Loc[0]:e.Loc[1]]
+				openTag = openTag[:strings.IndexByte(openTag, '>')] + ` id="` + e.ID + `">`
+				svg = svg[:e.Loc[0]] + openTag + fillTextInner(svg[e.Inner[0]:e.Inner[1]], slots) + "</text>" + svg[e.Loc[1]:]
+			} else {
+				svg = svg[:e.Inner[0]] + fillTextInner(svg[e.Inner[0]:e.Inner[1]], slots) + svg[e.Inner[1]:]
+			}
+			continue
+		}
+		img := fmt.Sprintf(`<image id="%s" href="{{%s}}" x="%v" y="%v" width="%v" height="%v" preserveAspectRatio="xMidYMid meet"/>`,
+			e.ID, slots[0], e.X, e.Y, e.W, e.H)
+		end := e.Loc[1]
+		if !strings.HasSuffix(strings.TrimSpace(svg[e.Loc[0]:e.Loc[1]]), "/>") {
+			if close := "</" + e.Tag + ">"; strings.HasPrefix(svg[end:], close) {
+				end += len(close)
+			}
+		}
+		svg = svg[:e.Loc[0]] + img + svg[end:]
 	}
 	return svg, nil
 }
