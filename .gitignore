@@ -46,3 +46,4 @@ assets/images/*
 !assets/images/mark.svg
 !assets/images/photo.png
 /bin/
+state.db
