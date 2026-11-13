@@ -8,7 +8,7 @@
 //
 // Env: CHROME_BIN overrides browser discovery, SMOKE_SITE sets the site.
 import { spawn, execSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -59,6 +59,8 @@ server.stdout.on("data", (d) => srvOut.push(String(d)));
 server.stderr.on("data", (d) => srvOut.push(String(d)));
 
 // ---- chrome + cdp ----------------------------------------------------------
+const ud = mkdtempSync(join(tmpdir(), "smoke-"));
+const chromeErr = [];
 const chrome = spawn(
   chromeBin(),
   [
@@ -67,21 +69,32 @@ const chrome = spawn(
     "--no-sandbox",
     "--disable-dev-shm-usage",
     "--no-first-run",
-    `--user-data-dir=${mkdtempSync(join(tmpdir(), "smoke-"))}`,
+    `--user-data-dir=${ud}`,
     "--remote-debugging-port=0",
     "about:blank",
   ],
   { stdio: ["ignore", "ignore", "pipe"] },
 );
-const wsPort = await new Promise((res, rej) => {
-  let b = "";
-  chrome.stderr.on("data", (d) => {
-    b += d;
-    const m = b.match(/DevTools listening on ws:\/\/[^:/]+:(\d+)\//);
-    if (m) res(+m[1]);
-  });
-  setTimeout(() => rej(new Error("chrome debug port timeout")), 15000);
-});
+chrome.stderr.on("data", (d) => chromeErr.push(String(d)));
+
+// DevToolsActivePort is Chrome's stable port-discovery file (written into
+// the user-data-dir); the "DevTools listening" stderr line is not emitted
+// on every platform/headless build.
+const wsPort = await (async () => {
+  const pf = join(ud, "DevToolsActivePort");
+  for (let i = 0; i < 80; i++) {
+    try {
+      const port = Number.parseInt(readFileSync(pf, "utf8"), 10);
+      if (port > 0) return port;
+    } catch {
+      /* file not written yet — retry */
+    }
+    await sleep(250);
+  }
+  throw new Error(
+    "chrome debug port timeout\n" + chromeErr.join("").slice(-2000),
+  );
+})();
 
 let msgId = 0;
 const pending = new Map();
