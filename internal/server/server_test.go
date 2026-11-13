@@ -715,7 +715,7 @@ func TestAssetFileGuardsAndCache(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("status %d", w.Code)
 	}
-	if got := w.Header().Get("Cache-Control"); !strings.Contains(got, "max-age=300") {
+	if got := w.Header().Get("Cache-Control"); !strings.Contains(got, "max-age=3600") {
 		t.Fatalf("Cache-Control = %q", got)
 	}
 	for _, target := range []string{"/asset/nope/x.png", "/asset/images/../../etc/passwd"} {
