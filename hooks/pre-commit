@@ -23,7 +23,9 @@ fi
 # SEMGREP_SKIP=1 to bypass when offline; CI is the authoritative gate.
 if command -v semgrep >/dev/null && [ -z "$SEMGREP_SKIP" ]; then
   scan_files=$(printf '%s\n' "$staged" | grep -v '^docs/assets/demo/' || true)
-  [ -n "$scan_files" ] && printf '%s\n' "$scan_files" | tr '\n' '\0' | xargs -0 semgrep scan --config p/golang --config p/security-audit --metrics=off \
-    --timeout 30 --error \
-    || fail "semgrep findings on staged files"
+  if [ -n "$scan_files" ]; then
+    printf '%s\n' "$scan_files" | tr '\n' '\0' | xargs -0 semgrep scan --config p/golang --config p/security-audit --metrics=off \
+      --timeout 30 --error \
+      || fail "semgrep findings on staged files"
+  fi
 fi
