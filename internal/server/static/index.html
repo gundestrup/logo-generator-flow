@@ -194,6 +194,7 @@
         padding: 0;
         cursor: pointer;
       }
+      #font-modal,
       #modal {
         position: fixed;
         inset: 0;
@@ -273,6 +274,23 @@
         width: 4.6em;
         border-color: #3a527a !important;
         background: #0d1526 !important;
+      }
+      .fontlist {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .frow {
+        justify-content: flex-start;
+      }
+      .fglyph {
+        font-size: 18px;
+        min-width: 180px;
+        text-align: left;
+      }
+      .fname {
+        color: var(--dim);
+        font-size: 11px;
       }
       .font-prev {
         font-size: 15px;
@@ -418,7 +436,15 @@
                 x-bind:hidden="!fontSel"
                 x-bind:style="fontStyle(fontFamilyFor(fontSel))"
                 >AaBbGg 123</span
-              ></label
+              >
+              <button
+                type="button"
+                class="button is-small"
+                title="pick font — every family in its own glyphs"
+                x-on:click="openFontPick('global')"
+              >
+                Aa…
+              </button></label
             >
           </div>
         </section>
@@ -589,6 +615,14 @@
                       x-bind:style="fontStyle(mkFont)"
                       >AaBbGg 123</span
                     >
+                    <button
+                      type="button"
+                      class="button is-small"
+                      title="pick font — previews your selected text"
+                      x-on:click="openFontPick('markup')"
+                    >
+                      Aa…
+                    </button>
                     <input
                       type="number"
                       class="input is-small se-size"
@@ -720,6 +754,38 @@
             </div>
           </div>
         </section>
+      </div>
+    </div>
+    <div id="font-modal" x-show="fontModalOpen" hidden>
+      <div class="dlg">
+        <h2
+          x-text="fontPickTarget === 'markup' ? 'pick inline font' : 'pick global font'"
+        >
+          pick font
+        </h2>
+        <div class="fontlist">
+          <template x-for="r in fontPickRows()" :key="r.path || r.family">
+            <button
+              type="button"
+              class="pick button is-small frow"
+              x-on:click="pickFontRow(r)"
+            >
+              <span
+                class="fglyph"
+                x-bind:style="fontStyle(r.family)"
+                x-text="fontSampleTxt"
+              ></span>
+              <span class="fname" x-text="r.label"></span>
+            </button>
+          </template>
+        </div>
+        <button
+          type="button"
+          class="button is-small"
+          x-on:click="fontModalOpen = false"
+        >
+          close
+        </button>
       </div>
     </div>
     <div id="modal" x-show="modalOpen" hidden>

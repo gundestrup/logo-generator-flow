@@ -43,6 +43,9 @@ document.addEventListener("alpine:init", () => {
     editOpen: false,
     mapOpen: false,
     modalOpen: false,
+    fontModalOpen: false,
+    fontPickTarget: "",
+    fontSampleTxt: "AaBbGg 123",
     measuring: false,
     imgList: [],
     filesList: [],
@@ -404,6 +407,43 @@ document.addEventListener("alpine:init", () => {
     fontFamilyFor(path) {
       return this.fonts.find((f) => f.path === path)?.family || "";
     },
+    // font picker modal — every row renders the sample in that family
+    async openFontPick(target) {
+      this.fontPickTarget = target;
+      if (!this.fonts.length) await this.loadFonts();
+      this.fontSampleTxt =
+        target === "markup" ? this.selText() || "AaBbGg 123" : "AaBbGg 123";
+      this.fontModalOpen = true;
+    },
+    selText() {
+      const ta = this.$refs.seText;
+      if (!ta) return "";
+      return ta.value
+        .substring(ta.selectionStart, ta.selectionEnd)
+        .replace(/\[\/?[a-z:#][^\]]*\]/g, "")
+        .slice(0, 48);
+    },
+    fontPickRows() {
+      if (this.fontPickTarget === "markup") {
+        return this.fontFamilies().map((f) => ({ label: f, family: f }));
+      }
+      return this.fonts.map((f) => ({
+        label: this.fontLabel(f),
+        family: f.family,
+        path: f.path,
+      }));
+    },
+    pickFontRow(r) {
+      if (this.fontPickTarget === "markup") {
+        this.mkFont = r.family;
+        this.swFont();
+      } else {
+        this.fontSel = r.path;
+        this.fontChanged();
+      }
+      this.fontModalOpen = false;
+    },
+
     fontLabel(f) {
       return `${f.name}${f.family ? ` — ${f.family}` : ""}`;
     },

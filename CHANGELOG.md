@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Font picker modal — an `Aa…` button next to each font select opens a
+  list where every family renders sample text in its own glyphs (the
+  markup picker previews your actual textarea selection). Global mode
+  picks a font file, inline mode wraps the selection in `[font:…]`.
+
 ## [0.3.0] - 2026-11-13
 
 ### Added
