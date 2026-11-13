@@ -64,6 +64,8 @@ const chrome = spawn(
   [
     "--headless=new",
     "--disable-gpu",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
     "--no-first-run",
     `--user-data-dir=${mkdtempSync(join(tmpdir(), "smoke-"))}`,
     "--remote-debugging-port=0",
@@ -75,7 +77,7 @@ const wsPort = await new Promise((res, rej) => {
   let b = "";
   chrome.stderr.on("data", (d) => {
     b += d;
-    const m = b.match(/:(\d+)\//);
+    const m = b.match(/DevTools listening on ws:\/\/[^:/]+:(\d+)\//);
     if (m) res(+m[1]);
   });
   setTimeout(() => rej(new Error("chrome debug port timeout")), 15000);
@@ -84,9 +86,24 @@ const wsPort = await new Promise((res, rej) => {
 let msgId = 0;
 const pending = new Map();
 const jsErrors = [];
-const wsUrl = await fetch(`http://127.0.0.1:${wsPort}/json/list`)
-  .then((r) => r.json())
-  .then((t) => t.find((x) => x.type === "page").webSocketDebuggerUrl);
+// Chrome prints "DevTools listening" before the HTTP endpoint accepts
+// connections — poll /json/list rather than racing a single fetch.
+// nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request -- loopback-only CDP endpoint
+let pageTarget;
+for (let i = 0; i < 60; i++) {
+  try {
+    const targets = await fetch(`http://127.0.0.1:${wsPort}/json/list`).then(
+      (r) => r.json(),
+    );
+    pageTarget = targets.find((x) => x.type === "page");
+    if (pageTarget) break;
+  } catch {
+    /* endpoint not up yet — retry */
+  }
+  await new Promise((r) => setTimeout(r, 250));
+}
+if (!pageTarget) throw new Error("chrome devtools endpoint never came up");
+const wsUrl = pageTarget.webSocketDebuggerUrl;
 const ws = new WebSocket(wsUrl);
 await new Promise((r) => (ws.onopen = r));
 ws.onmessage = (m) => {
