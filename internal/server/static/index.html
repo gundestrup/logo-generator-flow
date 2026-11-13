@@ -363,6 +363,20 @@
         x-on:click="dupSite()"
       >
         ⧉</button
+      ><button
+        type="button"
+        class="button is-small"
+        title="rename this config"
+        x-on:click="renameSite()"
+      >
+        ✎</button
+      ><button
+        type="button"
+        class="button is-small danger"
+        title="delete this config"
+        x-on:click="deleteSite()"
+      >
+        ✕</button
       ><button type="button" class="button is-small" x-on:click="renderAll()">
         render all formats
       </button>

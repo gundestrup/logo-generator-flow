@@ -114,6 +114,62 @@ func TestDuplicate(t *testing.T) {
 	}
 }
 
+func TestRename(t *testing.T) {
+	h := newEditTestHandler(t)
+	w := doEdit(h, "POST", "/api/rename?name=acme&to=acme-renamed", "")
+	if w.Code != 200 {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	if _, err := os.Stat(filepath.Join(h.configsPath, "acme.json")); !os.IsNotExist(err) {
+		t.Fatal("source should be removed after rename")
+	}
+	b, err := os.ReadFile(filepath.Join(h.configsPath, "acme-renamed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var probe struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(b, &probe); err != nil || probe.Name != "acme-renamed" {
+		t.Fatalf("name = %q err=%v", probe.Name, err)
+	}
+	if w := doEdit(h, "POST", "/api/rename?name=acme-renamed&to=acme-renamed", ""); w.Code != 400 {
+		t.Fatalf("same-name rename status %d", w.Code)
+	}
+	if w := doEdit(h, "POST", "/api/rename?name=acme-renamed&to=bad%2Fname", ""); w.Code != 400 {
+		t.Fatalf("invalid name status %d", w.Code)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	h := newEditTestHandler(t)
+	if w := doEdit(h, "POST", "/api/delete?name=nope", ""); w.Code != 400 {
+		t.Fatalf("missing file status %d", w.Code)
+	}
+	// refuse deleting the last remaining config
+	entries, err := filepath.Glob(filepath.Join(h.configsPath, "*.json"))
+	if err != nil || len(entries) == 0 {
+		t.Fatal("test handler should have configs")
+	}
+	for _, e := range entries[:len(entries)-1] {
+		if err := os.Remove(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := doEdit(h, "POST", "/api/delete?name="+filepath.Base(entries[len(entries)-1])[:len(filepath.Base(entries[len(entries)-1]))-5], "")
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "last config") {
+		t.Fatalf("last-config delete: %d %s", w.Code, w.Body)
+	}
+	// with two configs again, delete works
+	testutil.WriteFile(t, filepath.Join(h.configsPath, "extra.json"), `{"name":"extra"}`)
+	if w := doEdit(h, "POST", "/api/delete?name=extra", ""); w.Code != 200 {
+		t.Fatalf("delete status %d: %s", w.Code, w.Body)
+	}
+	if _, err := os.Stat(filepath.Join(h.configsPath, "extra.json")); !os.IsNotExist(err) {
+		t.Fatal("config should be removed")
+	}
+}
+
 func TestEditSite(t *testing.T) {
 	h := newEditTestHandler(t)
 	w := doEdit(h, "GET", "/api/site?name=acme", "")

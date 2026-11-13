@@ -56,6 +56,8 @@ func Mux(h *handler, onShutdown func()) *http.ServeMux {
 	mux.HandleFunc("POST /api/render", h.renderAll)
 	mux.HandleFunc("POST /api/save", h.save)
 	mux.HandleFunc("POST /api/duplicate", h.duplicate)
+	mux.HandleFunc("POST /api/rename", h.rename)
+	mux.HandleFunc("POST /api/delete", h.deleteConfig)
 	mux.HandleFunc("GET /api/ping", h.ping)
 	mux.HandleFunc("POST /api/shutdown", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -463,26 +465,33 @@ func (h *handler) save(w http.ResponseWriter, r *http.Request) {
 // "name" field so the copy is a valid standalone site. `to` must not exist
 // yet — duplicates never clobber an existing config.
 func (h *handler) duplicate(w http.ResponseWriter, r *http.Request) {
-	src, err := h.configPath(r.URL.Query().Get("name"))
-	if err != nil {
+	if err := h.copyConfig(r.URL.Query().Get("name"), r.URL.Query().Get("to")); err != nil {
 		jsonErr(w, err)
 		return
 	}
-	dst, err := h.configPath(r.URL.Query().Get("to"))
+	dst, _ := h.configPath(r.URL.Query().Get("to"))
+	writeJSON(w, http.StatusOK, map[string]string{"saved": dst})
+}
+
+// copyConfig writes configs/<to>.json as a copy of configs/<name>.json with
+// its "name" field rewritten to <to>. Both names are validated through
+// configPath — copies never clobber an existing config.
+func (h *handler) copyConfig(name, to string) error {
+	src, err := h.configPath(name)
 	if err != nil {
-		jsonErr(w, err)
-		return
+		return err
+	}
+	dst, err := h.configPath(to)
+	if err != nil {
+		return err
 	}
 	body, err := os.ReadFile(src) // #nosec G304 -- name is regex-validated, path joins configsPath
 	if err != nil {
-		jsonErr(w, err)
-		return
+		return err
 	}
 	if _, statErr := os.Stat(dst); statErr == nil {
-		jsonErr(w, fmt.Errorf("%s already exists", filepath.Base(dst)))
-		return
+		return fmt.Errorf("%s already exists", filepath.Base(dst))
 	}
-	to := r.URL.Query().Get("to")
 	enc, _ := json.Marshal(to) // always ValidSiteName here — safe chars
 	if nameRe.Match(body) {
 		body = nameRe.ReplaceAll(body, []byte(`"name": `+string(enc)))
@@ -490,14 +499,57 @@ func (h *handler) duplicate(w http.ResponseWriter, r *http.Request) {
 		body = append([]byte(`{"name": `+string(enc)+`,`), body[1:]...)
 	}
 	if _, err := config.Parse(body); err != nil {
-		jsonErr(w, fmt.Errorf("duplicate would be invalid: %w", err))
-		return
+		return fmt.Errorf("copied config would be invalid: %w", err)
 	}
 	if err := os.WriteFile(dst, body, 0o644); err != nil { // #nosec G306 G703 -- `to` is regex-validated via configPath and dst joins configsPath; site configs are committed files, not secrets
+		return err
+	}
+	return nil
+}
+
+// rename moves configs/<name>.json to configs/<to>.json — a copy followed
+// by removal of the source.
+func (h *handler) rename(w http.ResponseWriter, r *http.Request) {
+	name, to := r.URL.Query().Get("name"), r.URL.Query().Get("to")
+	if name == to {
+		jsonErr(w, fmt.Errorf("nothing to rename: %s", name))
+		return
+	}
+	src, err := h.configPath(name)
+	if err != nil {
 		jsonErr(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"saved": dst})
+	if err := h.copyConfig(name, to); err != nil {
+		jsonErr(w, err)
+		return
+	}
+	// #nosec G703 -- src is regex-validated via configPath and joins configsPath.
+	if err := os.Remove(src); err != nil {
+		jsonErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"saved": r.URL.Query().Get("to")})
+}
+
+// deleteConfig removes configs/<name>.json. The last remaining config is
+// refused — the editor needs at least one site.
+func (h *handler) deleteConfig(w http.ResponseWriter, r *http.Request) {
+	p, err := h.configPath(r.URL.Query().Get("name"))
+	if err != nil {
+		jsonErr(w, err)
+		return
+	}
+	if entries, derr := filepath.Glob(filepath.Join(h.configsPath, "*.json")); derr == nil && len(entries) <= 1 {
+		jsonErr(w, fmt.Errorf("refusing to delete the last config"))
+		return
+	}
+	// #nosec G703 -- p is regex-validated via configPath and joins configsPath.
+	if err := os.Remove(p); err != nil {
+		jsonErr(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"deleted": filepath.Base(p)})
 }
 
 // nameRe targets the top-level "name" field for duplicate's rewrite.

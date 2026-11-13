@@ -565,6 +565,42 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
+    async renameSite() {
+      const to = prompt(`rename configs/${this.site}.json to:`, this.site);
+      if (!to || to === this.site) return;
+      try {
+        await j(
+          "POST",
+          `/api/rename?name=${encodeURIComponent(this.site)}&to=${encodeURIComponent(to)}`,
+        );
+        await this.loadSites();
+        this.site = to;
+        this.loadSite(to);
+        this.status(`renamed → configs/${to}.json`, true);
+      } catch (e) {
+        this.status(e.message, false);
+      }
+    },
+
+    async deleteSite() {
+      if (
+        !confirm(
+          `delete configs/${this.site}.json permanently? this cannot be undone.`,
+        )
+      )
+        return;
+      try {
+        await j("POST", `/api/delete?name=${encodeURIComponent(this.site)}`);
+        await this.loadSites();
+        const next = this.sites[0]?.file;
+        this.site = next || "";
+        if (next) this.loadSite(next);
+        this.status("config deleted", true);
+      } catch (e) {
+        this.status(e.message, false);
+      }
+    },
+
     async save() {
       try {
         const name = this.site;

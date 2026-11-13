@@ -14,7 +14,7 @@
 
 [ci-badge]: https://github.com/gundestrup/logo-generator-flow/actions/workflows/ci.yml/badge.svg
 [ci-workflow]: https://github.com/gundestrup/logo-generator-flow/actions/workflows/ci.yml
-[version-badge]: https://img.shields.io/badge/version-0.2.0-blue.svg
+[version-badge]: https://img.shields.io/badge/version-0.3.0-blue.svg
 [changelog]: CHANGELOG.md
 
 CLI that renders per-site SVG logos from a shared `{{placeholder}}` template and
@@ -177,6 +177,11 @@ entirely and use only the bundled ones:
 Alternatively, convert text to paths in the design tool before exporting the
 template.
 
+The exported `logo.svg` also embeds `@font-face` rules — base64 data URIs —
+for every font family it references (from `fontsDir`/`fontFiles`), so the
+file renders correctly in browsers without the fonts installed. Raster
+outputs are unaffected; the rules are injected after resvg runs.
+
 ## Demo
 
 ```bash
@@ -202,15 +207,19 @@ config back to `configs/<name>.json`. No rasters are produced while
 editing — preview is SVG-only, so it works even without resvg/cwebp/
 avifenc installed.
 
-**Global settings** holds the font dropdown (`assets/fonts/`, real
-family names — sets `render.fontFiles` + `render.fontFamily`).
+The **site** dropdown lists each config's own `name` field (with the ⧉
+button to duplicate the current config to a new file) and accepts
+`?site=<name>` deep links. **Global settings** holds the font dropdown
+(`assets/fonts/`, real family names, each previewed in its own glyphs —
+sets `render.fontFiles` + `render.fontFamily`).
 **Generated** holds a backdrop selector (checker/white/black/dark/
 custom) that only changes the CSS behind the preview, never the output.
 
 Clicking a region in the template pane opens the contextual **edit**
 card below it: text slots get a markup toolbar (B/I/U, inline color,
 per-run font, and size), a content field, and a slot color; image slots get **pick…**
-(thumbnail popup of `assets/images/`), svg fill + stroke, and a × reset.
+(thumbnail popup of `assets/images/`) and an optional svg **recolor**
+(fill + stroke; leave it off to keep the image's original colors).
 Edits flow into a draft and re-render the generated preview immediately;
 **apply** (visible only when something changed) merges the draft into
 the JSON, and **save** writes it to disk.

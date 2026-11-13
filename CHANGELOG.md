@@ -7,49 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- Multi-word font families containing digits (e.g. `[font:Source Sans 3]`)
-  rendered as the fallback font — resvg rejected the unquoted CSS value.
-  Family names are now emitted as quoted CSS values; `--font-family` keeps
-  the raw name.
+## [0.3.0] - 2026-11-13
 
 ### Added
 
-- Render now prints a `note:` for config slots (text/images) that have no
-  `{{…}}` placeholder in the template — previously dropped silently.
-- Exported `logo.svg` embeds `@font-face` rules (base64 data URIs) for the
-  font families it references — self-contained output that renders
-  correctly in browsers without local font installs. Applied after
-  rasterization so resvg sees a clean document.
-- Font pickers render each option in its own glyphs plus a live
-  `AaBbGg 123` preview next to the select (`GET /fonts.css` serves the
-  faces; `internal/fonts` shares the sfnt family-name parser).
-- Image editor: `recolor` toggle — unchecked keeps the image's original
-  colors (no `fill`/`stroke` keys emitted) instead of forcing defaults.
-
-### Fixed
-
-- Slot editor size input was nearly invisible (dark-on-dark, unlabelled)
-  and cleared itself after applying — now a visibly bordered control that
-  keeps the last value.
-
-### Added
-
-- Duplicate a config from the editor: ⧉ button next to the site select
-  prompts for a new file name and `POST /api/duplicate?name=…&to=…`
-  copies the config (rewriting its `name` field), refusing to overwrite
-  an existing file.
+- Duplicate, rename, and delete configs from the editor — ⧉ / ✎ / ✕
+  buttons next to the site select. `POST /api/duplicate?name=…&to=…`
+  copies (rewriting the `name` field, refusing to overwrite), `POST
+/api/rename` moves the file, `POST /api/delete` removes it (refuses
+  the last remaining config; the UI asks for confirmation first).
 - `/api/sites` now returns `{name, file}` pairs — the site dropdown
   shows each config's own `name` field while endpoints keep addressing
   files by basename.
+- `?site=<name>` deep-link in the editor — loads a specific site on
+  open instead of the alphabetically first one.
+- Font pickers render each option in its own glyphs plus a live
+  `AaBbGg 123` preview next to the select (`GET /fonts.css` serves the
+  faces; `internal/fonts` shares the sfnt family-name parser).
+- Exported `logo.svg` embeds `@font-face` rules (base64 data URIs) for
+  the font families it references — self-contained output that renders
+  correctly in browsers without local font installs. Applied after
+  rasterization so resvg sees a clean document.
+- Image editor: `recolor` toggle — unchecked keeps the image's original
+  colors (no `fill`/`stroke` keys emitted) instead of forcing defaults.
+- Render now prints a `note:` for config slots (text/images) that have
+  no `{{…}}` placeholder in the template — previously dropped silently.
 - `make bump V=x.y.z` (`scripts/bump-version.sh`) — one-command release
   bump: writes VERSION and copies it into the places that must hold it
   statically (package.json field, README shields badge, new dated
   CHANGELOG section), then runs `version-check`. Refuses if the version
   already has a CHANGELOG section.
-- `?site=<name>` deep-link in the editor — loads a specific site on
-  open instead of the alphabetically first one.
 - `scripts/capture-editor.mjs` — CDP capture of the live `-ui` editor:
   picks the first site with region overlays, clicks a text region, and
   screenshots it. `docs/assets/demo.html` now embeds this real capture
@@ -58,6 +45,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/assets/cli.html` + `logo-generator-cli.*` media — a second
   animation showing a full `./logo-generator` render and the `-ui`
   launch, typed out progressively (10 frames @ 1.2fps).
+
+### Fixed
+
+- Multi-word font families containing digits (e.g. `[font:Source Sans 3]`)
+  rendered as the fallback font — resvg rejected the unquoted CSS value.
+  Family names are now emitted as quoted CSS values; `--font-family`
+  keeps the raw name.
+- Slot editor size input was nearly invisible (dark-on-dark, unlabelled)
+  and cleared itself after applying — now a visibly bordered control
+  that keeps the last value.
+- `x-bind:style` rewrote the whole `style` attribute and clobbered
+  `x-show`'s `display:none` — previews use `x-bind:hidden` instead.
+- Editor startup renders both slot-editor variants to measure height;
+  the measured value is now cached in `localStorage` and applied
+  synchronously on repeat visits (re-measured in the background).
 
 ## [0.2.0] - 2026-11-12
 
