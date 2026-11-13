@@ -302,6 +302,10 @@
         color: var(--text);
         white-space: nowrap;
       }
+      .font-none {
+        font-size: 13px;
+        color: var(--dim);
+      }
       #se-body label {
         display: block;
         margin: 8px 0 2px;
@@ -424,7 +428,10 @@
                 x-bind:hidden="!fontSel"
                 x-bind:style="fontStyle(fontFamilyFor(fontSel))"
                 x-text="selFontLabel() + '  AaBbGg 123'"
-              ></span>
+              ></span
+              ><span class="font-none" x-bind:hidden="fontSel !== ''"
+                >none selected</span
+              >
               <button
                 type="button"
                 class="button is-small"
