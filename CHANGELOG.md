@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Global font row: the dropdown is replaced by the `Aa…` picker button
+  plus an inline preview (`Family  AaBbGg 123`) on one line.
+- Font and image modals close on backdrop click and Escape (row clicks
+  already closed the font modal).
+
+### Fixed
+
+- Global font control was always empty — `loadFonts()` captured
+  `fontSel` before its `await` and restored the stale `""` over the
+  value `loadSite` had just read from `render.fontFiles` (async race).
+
 ## [0.4.0] - 2026-11-13
 
 ### Added

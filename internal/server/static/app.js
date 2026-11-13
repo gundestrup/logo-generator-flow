@@ -162,6 +162,11 @@ document.addEventListener("alpine:init", () => {
       try {
         const d = await j("GET", `/api/site?name=${encodeURIComponent(name)}`);
         this.configText = d.config;
+        try {
+          this.fontSel = JSON.parse(d.config).render?.fontFiles?.[0] || "";
+        } catch {
+          /* keep current fontSel */
+        }
         injectSvg(this.$refs.tpl, d.template || "");
         // Size the stage + preview box from the viewBox immediately —
         // without this they collapse/clip until analyze lands.
@@ -445,6 +450,11 @@ document.addEventListener("alpine:init", () => {
       this.fontModalOpen = false;
     },
 
+    selFontLabel() {
+      const fam = this.fontFamilyFor(this.fontSel);
+      if (fam) return fam;
+      return this.fontSel ? this.fontSel.split("/").pop() : "";
+    },
     fontLabel(f) {
       return `${f.name}${f.family ? ` — ${f.family}` : ""}`;
     },
@@ -491,10 +501,8 @@ document.addEventListener("alpine:init", () => {
 
     async loadFonts() {
       try {
-        const prev = this.fontSel;
         const d = await j("GET", "/api/fonts");
         this.fonts = d.fonts;
-        this.fontSel = prev;
       } catch {
         /* no assets/fonts dir */
       }
