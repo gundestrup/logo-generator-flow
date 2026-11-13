@@ -28,6 +28,8 @@ pixel-identical. Images embed as base64 data URIs; remote URLs are rejected.
 ```bash
 make check           # version drift, fmt, vet, lint, race tests, build
 make frontend-check  # biome lint + prettier check (npm run check)
+make smoke           # build + headless-Chrome CDP smoke of the editor UI
+make cover-check     # per-package coverage floor (MIN=80 default)
 make ready           # check + frontend + deps/semgrep/vuln scans (needs network)
 make run             # build + render all configs/*.json
 make demo            # render sites + serve GUI demo on :8080

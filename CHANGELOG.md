@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `polygon` and `line` are mappable too, and text elements carry a
   content snippet so map labels read `"jekyll-client-…"` not just
   `auto-8`.
+- `scripts/smoke-editor.mjs` + `make smoke` — headless-Chrome CDP smoke
+  of the editor UI (site load, font/image modals, template select,
+  format toggles + dirty-save, map modal) asserting zero console errors;
+  runs as a `smoke` job in CI. Closes the frontend test gap — `app.js`
+  previously had zero automated coverage.
+- Golden SVG test (`internal/render/golden_test.go`, `-update` to
+  regen) — byte-exact output lock covering font-family quoting, styled
+  markup, colored slots, svg recolor, and base64 embedding.
+- `make cover-check` (in `make check`) — per-package coverage floor,
+  `MIN=80` default.
 - `FuzzAnalyzeFill` fuzzes the analyze→fill round-trip: every element
   the analyzer reports must be fillable, with no orphan mappings.
 - Remap detection: each element gets a fingerprint (tag + normalized

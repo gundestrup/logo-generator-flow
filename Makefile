@@ -2,7 +2,7 @@ APP_VERSION := $(shell tr -d '\r\n' < VERSION)
 LDFLAGS := -s -w -X main.version=$(APP_VERSION)
 BIN := logo-generator
 
-.PHONY: all build run test test-race cover fmt fmt-check vet lint semgrep \
+.PHONY: all build run test test-race cover cover-check smoke fmt fmt-check vet lint semgrep \
 	vuln-check deps-check demo demo-media edit frontend-check version-check \
 	install-hooks quality ready clean bump
 
@@ -21,6 +21,12 @@ test-race:
 cover:
 	go test -race -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
+
+cover-check:
+	sh scripts/check-coverage.sh
+
+smoke: build
+	node scripts/smoke-editor.mjs
 
 fmt:
 	gofmt -s -w .
@@ -98,7 +104,7 @@ install-hooks:
 	git config core.hooksPath hooks
 
 # Full local quality gate — same checks CI runs.
-check: version-check fmt-check vet lint test-race build
+check: version-check fmt-check vet lint test-race cover-check build
 
 # Everything locally verifiable in one command — deterministic checks
 # first, network-dependent scans last.

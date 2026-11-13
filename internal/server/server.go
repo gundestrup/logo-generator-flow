@@ -847,8 +847,8 @@ func templateFill(svg string, mapping, fps map[string]string) (string, error) {
 			e.ID, slots[0], e.X, e.Y, e.W, e.H)
 		end := e.Loc[1]
 		if !strings.HasSuffix(strings.TrimSpace(svg[e.Loc[0]:e.Loc[1]]), "/>") {
-			if close := "</" + e.Tag + ">"; strings.HasPrefix(svg[end:], close) {
-				end += len(close)
+			if closeTag := "</" + e.Tag + ">"; strings.HasPrefix(svg[end:], closeTag) {
+				end += len(closeTag)
 			}
 		}
 		svg = svg[:e.Loc[0]] + img + svg[end:]
