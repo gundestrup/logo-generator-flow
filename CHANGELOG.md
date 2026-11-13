@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Template mapping now works on templates **without element ids**:
+  `analyzeTemplate` numbers every mappable element `auto-<ord>` by
+  document order and `templateFill` injects a real `id="auto-N"` plus
+  the `{{slot}}` placeholder — the filled file is stable afterwards.
+  `polygon` and `line` are mappable too, and text elements carry a
+  content snippet so map labels read `"jekyll-client-…"` not just
+  `auto-8`.
+- Remap detection: each element gets a fingerprint (tag + normalized
+  open tag + text) sent back in `template-fill`'s new `fps` field — if
+  the template changed since the map modal scanned it, fill fails
+  loudly with "changed since mapping — reopen map template to remap"
+  instead of writing placeholders into the wrong element.
+
+### Fixed
+
+- Multi-line `<text>` elements were invisible to template analysis —
+  the inner-content match couldn't span newlines (`(?s)` now set on the
+  element and tspan matchers).
+- `circle`/`ellipse` elements produced 0×0 (or stroke-width-polluted)
+  bounding boxes — `cx`/`cy`/`r`/`rx`/`ry` were never captured and
+  `stroke-width=` aliased `width=`.
+- A `<text>` mapped to a slot but containing no `<tspan>`s lost the
+  placeholder entirely — it now receives `{{slot}}` as plain content.
+
+### Added
+
 - Global settings card: `name` input, `template` picker (new
   `GET /api/templates`), and output-format checkboxes (svg is always
   written — shown checked+disabled; png/webp/avif/jpeg toggle

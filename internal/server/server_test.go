@@ -347,11 +347,14 @@ func TestEditPreviewObjectSlots(t *testing.T) {
 func TestAnalyzeTemplate(t *testing.T) {
 	svg := `<svg><g><path id="Box" d="M10 20 L60 20 C65 20 70 25 70 30 L70 80 L10 80 Z"/><text id="Lbl" transform="matrix(1 0 0 1 100 200)"><tspan>x</tspan></text><path d="M0 0"/></g></svg>`
 	els := analyzeTemplate(svg)
-	if len(els) != 2 {
+	if len(els) != 3 {
 		t.Fatalf("elements = %+v", els)
 	}
 	if els[0].ID != "Box" || els[0].X != 10 || els[0].Y != 20 || els[0].W != 60 || els[0].H != 60 {
 		t.Fatalf("box = %+v", els[0])
+	}
+	if els[2].ID != "auto-2" || els[2].Ord != 2 || els[2].Fp == "" {
+		t.Fatalf("auto element = %+v", els[2])
 	}
 	got := els[1]
 	near := func(a, b float64) bool { d := a - b; return d > -0.01 && d < 0.01 }
@@ -364,7 +367,7 @@ func TestAnalyzeTemplate(t *testing.T) {
 
 func TestTemplateFill(t *testing.T) {
 	svg := `<svg><path id="Box" d="M10 20 L70 20 L70 80 L10 80 Z" class="c"/><text id="Lbl"><tspan class="a">one</tspan><tspan class="b">two</tspan><tspan class="c">three</tspan></text></svg>`
-	out, err := templateFill(svg, map[string]string{"image1": "Box", "text1": "Lbl", "text2": "Lbl"})
+	out, err := templateFill(svg, map[string]string{"image1": "Box", "text1": "Lbl", "text2": "Lbl"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,8 +380,71 @@ func TestTemplateFill(t *testing.T) {
 		!strings.Contains(out, `<tspan class="c"></tspan>`) {
 		t.Fatalf("tspans: %s", out)
 	}
-	if _, err := templateFill(svg, map[string]string{"image1": "Nope"}); err == nil {
+	if _, err := templateFill(svg, map[string]string{"image1": "Nope"}, nil); err == nil {
 		t.Fatal("expected missing-id error")
+	}
+}
+
+func TestTemplateFillAuto(t *testing.T) {
+	svg := `<svg><rect x="1" y="2" width="30" height="40" fill="#000"/><text x="10" y="50"><tspan class="a">one</tspan><tspan class="b">two</tspan></text><text x="10" y="90">plain</text></svg>`
+	els := analyzeTemplate(svg)
+	fps := map[string]string{}
+	for _, e := range els {
+		fps[e.ID] = e.Fp
+	}
+	if len(els) != 3 || els[0].ID != "auto-0" || els[1].ID != "auto-1" || els[2].ID != "auto-2" {
+		t.Fatalf("elements = %+v", els)
+	}
+	if els[0].X != 1 || els[0].W != 30 || els[1].Tag != "text" || els[2].Text != "plain" {
+		t.Fatalf("elements = %+v", els)
+	}
+	out, err := templateFill(svg, map[string]string{
+		"image1": "auto-0", "text1": "auto-1", "text2": "auto-1", "text3": "auto-2"}, fps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`<image id="auto-0" href="{{image1}}"`,
+		`<text x="10" y="50" id="auto-1">`,
+		`<tspan class="a">{{text1}}</tspan>`,
+		`<tspan class="b">{{text2}}</tspan>`,
+		` id="auto-2">{{text3}}</text>`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	// Re-analysis of the filled file sees real ids + slots — no autos left.
+	els2 := analyzeTemplate(out)
+	for _, e := range els2 {
+		if strings.HasPrefix(e.ID, "auto-") && e.Fp != els[e.Ord].Fp && e.Slot == "" {
+			t.Fatalf("unexpected auto remnant %+v", e)
+		}
+	}
+	// Stale fingerprint → remap-needed error.
+	bad := map[string]string{"auto-0": "deadbeef"}
+	if _, err := templateFill(svg, map[string]string{"image1": "auto-0"}, bad); err == nil ||
+		!strings.Contains(err.Error(), "changed since mapping") {
+		t.Fatalf("expected remap-needed error, got %v", err)
+	}
+}
+
+func TestTemplateFillShapes(t *testing.T) {
+	svg := `<svg><circle cx="760" cy="600" r="120" stroke="#fff" stroke-width="14"/><polygon points="0,0 10,0 10,20"/><line x1="1" y1="1" x2="50" y2="1"/></svg>`
+	els := analyzeTemplate(svg)
+	if len(els) != 3 {
+		t.Fatalf("elements = %+v", els)
+	}
+	// circle bbox must come from cx/cy/r — not x/y/width (stroke-width must
+	// not leak in as width).
+	if els[0].X != 640 || els[0].Y != 480 || els[0].W != 240 || els[0].H != 240 {
+		t.Fatalf("circle = %+v", els[0])
+	}
+	if els[1].X != 0 || els[1].Y != 0 || els[1].W != 10 || els[1].H != 20 {
+		t.Fatalf("polygon = %+v", els[1])
+	}
+	if els[2].X != 1 || els[2].Y != 1 || els[2].W != 49 {
+		t.Fatalf("line = %+v", els[2])
 	}
 }
 

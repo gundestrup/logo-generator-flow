@@ -74,6 +74,7 @@ document.addEventListener("alpine:init", () => {
     tplBox: null,
     slotMap: {},
     mapAssign: {},
+    mapFp: {},
     mapElements: [],
     allSlots: [
       "image1",
@@ -625,7 +626,9 @@ document.addEventListener("alpine:init", () => {
       );
     },
     mapOptLabel(e) {
-      return `${e.id}${e.w ? ` (${Math.round(e.w)}×${Math.round(e.h)})` : ""}`;
+      const dims = e.w ? ` (${Math.round(e.w)}×${Math.round(e.h)})` : "";
+      const txt = e.text ? ` "${e.text.slice(0, 24)}"` : "";
+      return `${e.id}${txt}${dims}`;
     },
     async openMap() {
       try {
@@ -633,6 +636,8 @@ document.addEventListener("alpine:init", () => {
         this.regions = d.elements;
         this.tplBox = d.viewBox;
         this.mapElements = d.elements;
+        this.mapFp = {};
+        for (const e of d.elements) if (e.fp) this.mapFp[e.id] = e.fp;
         for (const e of d.elements) if (e.slot) this.slotMap[e.id] = e.slot;
         this.mapAssign = {};
         for (const [el, slot] of Object.entries(this.slotMap))
@@ -675,6 +680,7 @@ document.addEventListener("alpine:init", () => {
           JSON.stringify({
             config: JSON.parse(this.configText),
             mapping,
+            fps: this.mapFp,
           }),
         );
         this.patch((o) => {

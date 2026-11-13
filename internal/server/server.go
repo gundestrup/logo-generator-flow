@@ -4,13 +4,16 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"io"
 	"io/fs"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -610,22 +613,39 @@ func (h *handler) outputFile(w http.ResponseWriter, r *http.Request) {
 
 // ---- template analysis & placeholder fill (editor "map template" flow) ----
 
-// tplElement is one id'd SVG element that can act as a replacement region.
+// tplElement is one SVG element that can act as a replacement region. Elements
+// without an id get a synthetic "auto-<ord>" id — filled into the file by
+// templateFill so the result is stable afterwards. Fp fingerprints the element
+// (tag + normalized open tag + text) so templateFill can detect a template that
+// changed since the map modal scanned it — ordinals are only valid for the
+// file they were scanned from.
 type tplElement struct {
 	ID   string  `json:"id"`
 	Tag  string  `json:"tag"`
 	Slot string  `json:"slot,omitempty"`
+	Ord  int     `json:"ord"`
+	Fp   string  `json:"fp,omitempty"`
+	Text string  `json:"text,omitempty"`
 	X    float64 `json:"x"`
 	Y    float64 `json:"y"`
 	W    float64 `json:"w"`
 	H    float64 `json:"h"`
+
+	// Loc/Inner index into the scanned document — only used to splice
+	// auto-* elements during templateFill; never serialized.
+	Loc   [2]int `json:"-"`
+	Inner [2]int `json:"-"`
 }
 
 var (
-	tplElemRe  = regexp.MustCompile(`<(path|rect|image|circle|ellipse)\b[^>]*\bid="([^"]+)"[^>]*>|<text\b[^>]*\bid="([^"]+)"[^>]*>(.*?)</text>`)
-	tplDRe     = regexp.MustCompile(`\bd="([^"]*)"`)
-	tplNumRe   = regexp.MustCompile(`-?\d+\.?\d*`)
-	tplAttrRe  = regexp.MustCompile(`\b(x|y|width|height)="(-?\d+\.?\d*)"`)
+	tplElemRe   = regexp.MustCompile(`(?s)<(path|rect|image|circle|ellipse|polygon|line)\b[^>]*>|<text\b[^>]*>(.*?)</text>`)
+	tplIDRe     = regexp.MustCompile(`\bid="([^"]+)"`)
+	tplPointsRe = regexp.MustCompile(`\bpoints="([^"]*)"`)
+	tplDRe      = regexp.MustCompile(`\bd="([^"]*)"`)
+	tplNumRe    = regexp.MustCompile(`-?\d+\.?\d*`)
+	// Attr names are preceded by whitespace so stroke-width= cannot alias
+	// width= (a `-` is not a word boundary we want to match on).
+	tplAttrRe  = regexp.MustCompile(`\s(x|y|cx|cy|r|rx|ry|x1|y1|x2|y2|width|height)="(-?\d+\.?\d*)"`)
 	tplXYRe    = regexp.MustCompile(`matrix\(1 0 0 1 (-?\d+\.?\d*) (-?\d+\.?\d*)\)`)
 	tplTransRe = regexp.MustCompile(
 		`translate\(\s*(-?\d+\.?\d*)[\s,]+(-?\d+\.?\d*)`)
@@ -636,23 +656,59 @@ var (
 	tplVBRe       = regexp.MustCompile(`viewBox="(-?[\d.]+)[ ,]+(-?[\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)"`)
 )
 
-// analyzeTemplate finds id'd elements and their bounding boxes. For <path>
-// the box is min/max over the d attribute's coordinate pairs — exact for
-// absolute-coordinate outlines like the figure boxes, approximate otherwise.
+// tplFingerprint hashes an element's identity — tag + whitespace-normalized
+// open tag + text content — so templateFill can tell "same element" from
+// "template was edited since the map modal scanned it".
+func tplFingerprint(tag, openTag, text string) string {
+	norm := strings.Join(strings.Fields(openTag), " ")
+	sum := sha256.Sum256([]byte(tag + "|" + norm + "|" + text))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+// analyzeTemplate finds mappable elements and their bounding boxes. Elements
+// without an id are numbered auto-<ord> by document order. For <path> and
+// <polygon> the box is min/max over coordinate pairs — exact for absolute
+// outlines like the figure boxes, approximate otherwise.
 func analyzeTemplate(svg string) []tplElement {
 	els := []tplElement{}
-	for _, m := range tplElemRe.FindAllStringSubmatch(svg, -1) {
-		e := tplElement{Tag: "text", ID: m[3]}
-		if m[1] != "" {
-			e.Tag, e.ID = m[1], m[2]
+	for i, m := range tplElemRe.FindAllStringSubmatchIndex(svg, -1) {
+		match := svg[m[0]:m[1]]
+		e := tplElement{Ord: i, Loc: [2]int{m[0], m[1]}}
+		if m[2] >= 0 {
+			e.Tag = svg[m[2]:m[3]]
+		} else {
+			e.Tag = "text"
+			e.Inner = [2]int{m[4], m[5]}
 		}
-		if p := config.Placeholder.FindStringSubmatch(m[0]); p != nil {
+		openTag := match
+		if j := strings.IndexByte(openTag, '>'); j >= 0 {
+			openTag = openTag[:j]
+		}
+		if idm := tplIDRe.FindStringSubmatch(openTag); idm != nil {
+			e.ID = idm[1]
+		} else {
+			e.ID = fmt.Sprintf("auto-%d", e.Ord)
+		}
+		if e.Tag == "text" {
+			inner := tplEntRe.ReplaceAllString(
+				tplInnerRe.ReplaceAllString(svg[e.Inner[0]:e.Inner[1]], ""), "x")
+			e.Text = strings.Join(strings.Fields(inner), " ")
+			if utf8.RuneCountInString(e.Text) > 40 {
+				e.Text = string([]rune(e.Text)[:40])
+			}
+		}
+		e.Fp = tplFingerprint(e.Tag, openTag, e.Text)
+		if p := config.Placeholder.FindStringSubmatch(match); p != nil {
 			e.Slot = p[1]
 		}
 		switch e.Tag {
-		case "path":
+		case "path", "polygon":
 			var nums []string
-			if dm := tplDRe.FindStringSubmatch(m[0]); dm != nil {
+			if e.Tag == "polygon" {
+				if pm := tplPointsRe.FindStringSubmatch(match); pm != nil {
+					nums = tplNumRe.FindAllString(pm[1], -1)
+				}
+			} else if dm := tplDRe.FindStringSubmatch(match); dm != nil {
 				nums = tplNumRe.FindAllString(dm[1], -1)
 			}
 			for i := 0; i+1 < len(nums); i += 2 {
@@ -669,13 +725,9 @@ func analyzeTemplate(svg string) []tplElement {
 			// editor's region overlay: position from matrix()/translate()/
 			// x= y= attrs, size from font-size x text length. The y attr is
 			// the baseline, so the box extends above it.
-			openTag := m[0]
-			if i := strings.IndexByte(openTag, '>'); i >= 0 {
-				openTag = openTag[:i]
-			}
-			if t := tplXYRe.FindStringSubmatch(m[0]); t != nil {
+			if t := tplXYRe.FindStringSubmatch(match); t != nil {
 				e.X, e.Y = atof(t[1]), atof(t[2])
-			} else if t := tplTransRe.FindStringSubmatch(m[0]); t != nil {
+			} else if t := tplTransRe.FindStringSubmatch(match); t != nil {
 				e.X, e.Y = atof(t[1]), atof(t[2])
 			} else {
 				attrs := map[string]float64{}
@@ -685,15 +737,13 @@ func analyzeTemplate(svg string) []tplElement {
 				e.X, e.Y = attrs["x"], attrs["y"]
 			}
 			size := 24.0
-			if fs := tplFontSizeRe.FindStringSubmatch(m[0]); fs != nil {
+			if fs := tplFontSizeRe.FindStringSubmatch(match); fs != nil {
 				size = atof(fs[1])
 			}
-			inner := tplEntRe.ReplaceAllString(
-				tplInnerRe.ReplaceAllString(m[4], ""), "x")
-			e.W = float64(utf8.RuneCountInString(strings.TrimSpace(inner))) * size * 0.6
+			e.W = float64(utf8.RuneCountInString(e.Text)) * size * 0.6
 			e.W = max(e.W, size)
 			e.H = size * 1.2
-			if a := tplAnchorRe.FindStringSubmatch(m[0]); a != nil {
+			if a := tplAnchorRe.FindStringSubmatch(match); a != nil {
 				if a[1] == "middle" {
 					e.X -= e.W / 2
 				} else {
@@ -701,21 +751,33 @@ func analyzeTemplate(svg string) []tplElement {
 				}
 			}
 			e.Y -= size * 0.9
+		case "circle":
+			attrs := tplAttrs(match)
+			e.X, e.Y = attrs["cx"]-attrs["r"], attrs["cy"]-attrs["r"]
+			e.W, e.H = 2*attrs["r"], 2*attrs["r"]
+		case "ellipse":
+			attrs := tplAttrs(match)
+			e.X, e.Y = attrs["cx"]-attrs["rx"], attrs["cy"]-attrs["ry"]
+			e.W, e.H = 2*attrs["rx"], 2*attrs["ry"]
+		case "line":
+			attrs := tplAttrs(match)
+			e.X, e.W = min(attrs["x1"], attrs["x2"]), max(math.Abs(attrs["x2"]-attrs["x1"]), 1)
+			e.Y, e.H = min(attrs["y1"], attrs["y2"]), max(math.Abs(attrs["y2"]-attrs["y1"]), 1)
 		default:
-			attrs := map[string]float64{}
-			for _, a := range tplAttrRe.FindAllStringSubmatch(m[0], -1) {
-				attrs[a[1]] = atof(a[2])
-			}
-			if e.Tag == "circle" {
-				e.X, e.Y = attrs["x"]-attrs["width"], attrs["y"]-attrs["width"]
-				e.W, e.H = 2*attrs["width"], 2*attrs["width"]
-			} else {
-				e.X, e.Y, e.W, e.H = attrs["x"], attrs["y"], attrs["width"], attrs["height"]
-			}
+			attrs := tplAttrs(match)
+			e.X, e.Y, e.W, e.H = attrs["x"], attrs["y"], attrs["width"], attrs["height"]
 		}
 		els = append(els, e)
 	}
 	return els
+}
+
+func tplAttrs(tag string) map[string]float64 {
+	attrs := map[string]float64{}
+	for _, a := range tplAttrRe.FindAllStringSubmatch(tag, -1) {
+		attrs[a[1]] = atof(a[2])
+	}
+	return attrs
 }
 
 func atof(s string) float64 {
@@ -728,7 +790,14 @@ func atof(s string) float64 {
 // ratio via xMidYMid meet). For <text>, multiple slots mapped to one id are
 // distributed across its tspans in slot order (extra tspans are emptied) so
 // styled segments keep their classes.
-func templateFill(svg string, mapping map[string]string) (string, error) {
+//
+// Elements addressed by a synthetic auto-<ord> id are located by their
+// document-order ordinal and verified against fps (fingerprint from the
+// analyze pass that produced the mapping) — a template that changed since
+// mapping fails loudly rather than writing the placeholder into the wrong
+// element. Filled elements get a real id="auto-N" injected, so the output
+// re-analyzes deterministically.
+func templateFill(svg string, mapping, fps map[string]string) (string, error) {
 	byID := map[string][]string{}
 	ids := []string{}
 	for slot, id := range mapping {
@@ -737,12 +806,66 @@ func templateFill(svg string, mapping map[string]string) (string, error) {
 		}
 		byID[id] = append(byID[id], slot)
 	}
+
+	autoOrds := []int{}
+	for _, id := range ids {
+		if strings.HasPrefix(id, "auto-") {
+			n, err := strconv.Atoi(strings.TrimPrefix(id, "auto-"))
+			if err != nil {
+				return "", fmt.Errorf("invalid element id %q", id)
+			}
+			autoOrds = append(autoOrds, n)
+		}
+	}
+	if len(autoOrds) > 0 {
+		auto := map[int]tplElement{}
+		for _, e := range analyzeTemplate(svg) {
+			auto[e.Ord] = e
+		}
+		sort.Sort(sort.Reverse(sort.IntSlice(autoOrds)))
+		for _, n := range autoOrds {
+			id := fmt.Sprintf("auto-%d", n)
+			e, ok := auto[n]
+			if !ok {
+				return "", fmt.Errorf("element %s not found — template changed? reopen map template", id)
+			}
+			if want := fps[id]; want != "" && want != e.Fp {
+				return "", fmt.Errorf("element %s changed since mapping — reopen map template to remap", id)
+			}
+			slots := append([]string(nil), byID[id]...)
+			sort.Strings(slots)
+			if e.Tag == "text" {
+				openTag := svg[e.Loc[0]:e.Loc[1]]
+				openTag = openTag[:strings.IndexByte(openTag, '>')] + ` id="` + id + `">`
+				svg = svg[:e.Loc[0]] + openTag + fillTextInner(svg[e.Inner[0]:e.Inner[1]], slots) + "</text>" + svg[e.Loc[1]:]
+				continue
+			}
+			img := fmt.Sprintf(`<image id="%s" href="{{%s}}" x="%v" y="%v" width="%v" height="%v" preserveAspectRatio="xMidYMid meet"/>`,
+				id, slots[0], e.X, e.Y, e.W, e.H)
+			end := e.Loc[1]
+			if !strings.HasSuffix(strings.TrimSpace(svg[e.Loc[0]:e.Loc[1]]), "/>") {
+				close := "</" + e.Tag + ">"
+				if strings.HasPrefix(svg[end:], close) {
+					end += len(close)
+				}
+			}
+			svg = svg[:e.Loc[0]] + img + svg[end:]
+		}
+		kept := ids[:0]
+		for _, id := range ids {
+			if !strings.HasPrefix(id, "auto-") {
+				kept = append(kept, id)
+			}
+		}
+		ids = kept
+	}
+
 	sort.Strings(ids)
 	for _, id := range ids {
 		slots := byID[id]
 		sort.Strings(slots)
-		re := regexp.MustCompile(`<(path|rect|image|circle|ellipse)\b[^>]*\bid="` + regexp.QuoteMeta(id) + `"[^>]*/>`)
-		tre := regexp.MustCompile(`(<text\b[^>]*\bid="` + regexp.QuoteMeta(id) + `"[^>]*>)(.*?)(</text>)`)
+		re := regexp.MustCompile(`<(path|rect|image|circle|ellipse|polygon|line)\b[^>]*\bid="` + regexp.QuoteMeta(id) + `"[^>]*/>`)
+		tre := regexp.MustCompile(`(?s)(<text\b[^>]*\bid="` + regexp.QuoteMeta(id) + `"[^>]*>)(.*?)(</text>)`)
 		if loc := re.FindStringIndex(svg); loc != nil {
 			var box tplElement
 			for _, e := range analyzeTemplate(svg[loc[0]:loc[1]]) {
@@ -757,28 +880,40 @@ func templateFill(svg string, mapping map[string]string) (string, error) {
 		if m == nil {
 			return "", fmt.Errorf("element id %q not found in template", id)
 		}
-		inner := svg[m[4]:m[5]]
-		tspans := regexp.MustCompile(`<tspan\b[^>]*>.*?</tspan>`).FindAllString(inner, -1)
-		filled := []string{}
-		for i, t := range tspans {
-			if i < len(slots) {
-				open := t[:strings.Index(t, ">")+1]
-				filled = append(filled, open+"{{"+slots[i]+"}}</tspan>")
-			} else {
-				open := t[:strings.Index(t, ">")+1]
-				filled = append(filled, open+"</tspan>")
-			}
-		}
-		if len(slots) > len(tspans) && len(tspans) > 0 {
-			extra := ""
-			for _, s := range slots[len(tspans):] {
-				extra += "{{" + s + "}}"
-			}
-			filled[len(filled)-1] = strings.TrimSuffix(filled[len(filled)-1], "</tspan>") + extra + "</tspan>"
-		}
-		svg = svg[:m[4]] + strings.Join(filled, "") + svg[m[5]:]
+		svg = svg[:m[4]] + fillTextInner(svg[m[4]:m[5]], slots) + svg[m[5]:]
 	}
 	return svg, nil
+}
+
+// fillTextInner distributes slots across a <text> element's tspans (emptied
+// when unmapped). A <text> without tspans gets the joined placeholders as
+// plain content.
+func fillTextInner(inner string, slots []string) string {
+	tspans := regexp.MustCompile(`(?s)<tspan\b[^>]*>.*?</tspan>`).FindAllString(inner, -1)
+	if len(tspans) == 0 {
+		extra := ""
+		for _, s := range slots {
+			extra += "{{" + s + "}}"
+		}
+		return extra
+	}
+	filled := []string{}
+	for i, t := range tspans {
+		open := t[:strings.Index(t, ">")+1]
+		if i < len(slots) {
+			filled = append(filled, open+"{{"+slots[i]+"}}</tspan>")
+		} else {
+			filled = append(filled, open+"</tspan>")
+		}
+	}
+	if len(slots) > len(tspans) {
+		extra := ""
+		for _, s := range slots[len(tspans):] {
+			extra += "{{" + s + "}}"
+		}
+		filled[len(filled)-1] = strings.TrimSuffix(filled[len(filled)-1], "</tspan>") + extra + "</tspan>"
+	}
+	return strings.Join(filled, "")
 }
 
 func (h *handler) tplAnalyze(w http.ResponseWriter, r *http.Request) {
@@ -811,7 +946,10 @@ func (h *handler) tplAnalyze(w http.ResponseWriter, r *http.Request) {
 type tplFillReq struct {
 	Config  json.RawMessage   `json:"config"`
 	Mapping map[string]string `json:"mapping"`
-	Out     string            `json:"out"`
+	// FPs carries element fingerprints from the template-analyze pass that
+	// produced the mapping — guards auto-* ordinals against template drift.
+	FPs map[string]string `json:"fps,omitempty"`
+	Out string            `json:"out"`
 }
 
 func (h *handler) tplFill(w http.ResponseWriter, r *http.Request) {
@@ -835,7 +973,7 @@ func (h *handler) tplFill(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, err)
 		return
 	}
-	filled, err := templateFill(string(b), req.Mapping)
+	filled, err := templateFill(string(b), req.Mapping, req.FPs)
 	if err != nil {
 		jsonErr(w, err)
 		return
