@@ -596,9 +596,9 @@ func (h *handler) assetFile(w http.ResponseWriter, r *http.Request) {
 		jsonErr(w, fmt.Errorf("invalid asset path"))
 		return
 	}
-	// Short cache: skips per-load revalidation of multi-hundred-KB font
-	// files; capped so a replaced asset can't look stale for long.
-	w.Header().Set("Cache-Control", "max-age=300")
+	// Content assets (fonts/images) change rarely — an hour of caching
+	// skips revalidation of multi-hundred-KB files while bounding staleness.
+	w.Header().Set("Cache-Control", "max-age=3600")
 	http.ServeFile(w, r, filepath.Join("assets", rel)) // #nosec G703 -- path is root-anchored Clean + restricted to images|fonts
 }
 

@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   markup picker previews your actual textarea selection). Global mode
   picks a font file, inline mode wraps the selection in `[font:…]`.
 
+### Fixed
+
+- `fonts.css` loaded render-blocking; now deferred (`media="print"` →
+  `all` on load) — pickers don't need it before first paint.
+- `/asset/` responses cached only 300s; bumped to `max-age=3600` for
+  font/image content files.
+- Font-modal rows rendered ~180 DOM nodes at startup while hidden;
+  the row getter now returns `[]` until the modal opens (page chrome
+  DOM down ~60% on font-heavy setups).
+
 ## [0.3.0] - 2026-11-13
 
 ### Added

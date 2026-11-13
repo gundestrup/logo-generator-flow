@@ -424,6 +424,7 @@ document.addEventListener("alpine:init", () => {
         .slice(0, 48);
     },
     fontPickRows() {
+      if (!this.fontModalOpen) return []; // rows only exist while open
       if (this.fontPickTarget === "markup") {
         return this.fontFamilies().map((f) => ({ label: f, family: f }));
       }
