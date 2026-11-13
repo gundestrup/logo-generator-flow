@@ -93,9 +93,9 @@ document.addEventListener("alpine:init", () => {
     timer: null,
 
     init() {
-      this.loadSites();
-      this.loadFonts();
-      this.loadTemplates();
+      void this.loadSites();
+      void this.loadFonts();
+      void this.loadTemplates();
       // click an svg element directly (not just its region box)
       this.$refs.tpl.addEventListener("click", (e) => {
         const n = e.target.closest("[id]");
@@ -157,7 +157,7 @@ document.addEventListener("alpine:init", () => {
         const hit = d.sites.find((s) => s.file === q) || d.sites[0];
         if (hit) {
           this.site = hit.file;
-          this.loadSite(hit.file);
+          void this.loadSite(hit.file);
         }
       });
     },
@@ -182,7 +182,7 @@ document.addEventListener("alpine:init", () => {
         }
         this.filesList = [];
         if (this.draft) this.closeEditor();
-        this.preview();
+        void this.preview();
         try {
           const a = await j("POST", "/api/template-analyze", d.config);
           this.regions = a.elements;
@@ -276,7 +276,7 @@ document.addEventListener("alpine:init", () => {
       }
       fn(o);
       this.configText = JSON.stringify(o, null, 2);
-      if (runPreview) this.preview();
+      if (runPreview) void this.preview();
     },
 
     // -- contextual slot editor --------------------------------
@@ -368,7 +368,7 @@ document.addEventListener("alpine:init", () => {
       document.querySelectorAll(".region.sel").forEach((r) => {
         r.classList.remove("sel");
       });
-      this.preview();
+      void this.preview();
     },
 
     isDirty() {
@@ -378,7 +378,7 @@ document.addEventListener("alpine:init", () => {
       );
     },
     changed() {
-      this.preview();
+      void this.preview();
     },
 
     sw(pre, post) {
@@ -402,14 +402,14 @@ document.addEventListener("alpine:init", () => {
       this.sw(`[font:${fam}]`, "[/]");
     },
     swSize() {
-      const n = parseFloat(this.mkSize);
+      const n = Number.parseFloat(this.mkSize);
       if (!n || n <= 0) return;
       this.sw(`[size:${n}]`, "[/]");
     },
     fontFamilies() {
-      return [
-        ...new Set(this.fonts.map((f) => f.family).filter(Boolean)),
-      ].sort();
+      return [...new Set(this.fonts.map((f) => f.family).filter(Boolean))].sort(
+        (a, b) => a.localeCompare(b),
+      );
     },
     fontStyle(f) {
       return f ? `font-family:'${String(f).replace(/'/g, "")}'` : "";
@@ -742,7 +742,7 @@ document.addEventListener("alpine:init", () => {
         await this.loadSites();
         const next = this.sites[0]?.file;
         this.site = next || "";
-        if (next) this.loadSite(next);
+        if (next) await this.loadSite(next);
         this.status("config deleted", true);
       } catch (e) {
         this.status(e.message, false);

@@ -306,7 +306,8 @@
         font-size: 13px;
         color: var(--dim);
       }
-      #gs > label {
+      #gs > label,
+      #gs > .gs-row {
         display: block;
         margin: 6px 0 4px;
         font-size: 12px;
@@ -483,7 +484,7 @@
                 </select>
               </span>
             </label>
-            <label
+            <span class="gs-row"
               >font
               <span
                 class="font-prev"
@@ -501,7 +502,7 @@
                 x-on:click="openFontPick('global')"
               >
                 Aa…
-              </button></label
+              </button></span
             >
             <div class="gs-lbl">output formats</div>
             <div class="fmt-row">
@@ -611,6 +612,7 @@
                   <span class="select is-small">
                     <select
                       x-model="mapAssign[slot]"
+                      x-bind:aria-label="slot"
                       x-on:change="mapAssigned(slot)"
                     >
                       <option value="">—</option>
