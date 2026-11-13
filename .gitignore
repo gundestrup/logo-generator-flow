@@ -36,8 +36,8 @@ Thumbs.db
 assets/fonts/*
 !assets/fonts/.gitkeep
 configs/borg*.json
-assets/templates/Borg-Collective*.svg
-assets/templates/borg-collective.svg
+assets/templates/*
+!assets/templates/logo.svg
 /Borg-Collective_template*.svg
 /Borg-Collective_template*.vectorcraft
 # Personal image assets — only the three demo assets are tracked

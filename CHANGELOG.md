@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Global settings card: `name` input, `template` picker (new
+  `GET /api/templates`), and output-format checkboxes (svg is always
+  written — shown checked+disabled; png/webp/avif/jpeg toggle
+  `output.formats`) — all edit the JSON config without touching the
+  textarea. A `save` button appears in the card header while the
+  config has unsaved changes. Template changes re-analyze the new
+  template (regions + viewBox) via a new `svg` field on
+  `POST /api/template-analyze`.
+
 ### Changed
 
 - Global font row: the dropdown is replaced by an inline preview

@@ -40,6 +40,8 @@ document.addEventListener("alpine:init", () => {
     configText: "",
     fonts: [],
     fontSel: "",
+    tplList: [],
+    savedText: "",
     editOpen: false,
     mapOpen: false,
     modalOpen: false,
@@ -92,6 +94,7 @@ document.addEventListener("alpine:init", () => {
     init() {
       this.loadSites();
       this.loadFonts();
+      this.loadTemplates();
       // click an svg element directly (not just its region box)
       this.$refs.tpl.addEventListener("click", (e) => {
         const n = e.target.closest("[id]");
@@ -162,6 +165,7 @@ document.addEventListener("alpine:init", () => {
       try {
         const d = await j("GET", `/api/site?name=${encodeURIComponent(name)}`);
         this.configText = d.config;
+        this.savedText = d.config;
         try {
           this.fontSel = JSON.parse(d.config).render?.fontFiles?.[0] || "";
         } catch {
@@ -261,7 +265,7 @@ document.addEventListener("alpine:init", () => {
       }
     },
 
-    patch(fn) {
+    patch(fn, runPreview = true) {
       let o;
       try {
         o = JSON.parse(this.configText);
@@ -271,7 +275,7 @@ document.addEventListener("alpine:init", () => {
       }
       fn(o);
       this.configText = JSON.stringify(o, null, 2);
-      this.preview();
+      if (runPreview) this.preview();
     },
 
     // -- contextual slot editor --------------------------------
@@ -523,6 +527,95 @@ document.addEventListener("alpine:init", () => {
         o.render.fontFamily = family;
       });
     },
+    async loadTemplates() {
+      try {
+        const d = await j("GET", "/api/templates");
+        this.tplList = d.templates;
+      } catch {
+        /* no assets/templates dir */
+      }
+    },
+    cfgParse() {
+      try {
+        return JSON.parse(this.configText);
+      } catch {
+        return null;
+      }
+    },
+    cfgDirty() {
+      return this.configText !== this.savedText;
+    },
+    cfgName() {
+      return this.cfgParse()?.name || "";
+    },
+    templatePath() {
+      return this.cfgParse()?.template || "";
+    },
+    tplOptions() {
+      const cur = this.templatePath();
+      return cur && !this.tplList.some((t) => t.path === cur)
+        ? [
+            { name: cur + " (not in assets/templates)", path: cur },
+            ...this.tplList,
+          ]
+        : this.tplList;
+    },
+    nameChanged(v) {
+      this.patch((o) => {
+        o.name = v;
+      }, false);
+    },
+    async tplChanged(v) {
+      this.patch((o) => {
+        o.template = v;
+      });
+      await this.refreshTemplate();
+    },
+    async refreshTemplate() {
+      try {
+        const d = await j("POST", "/api/template-analyze", this.configText);
+        if (d.svg) {
+          injectSvg(this.$refs.tpl, d.svg);
+          const r = aspectOf(this.$refs.tpl.querySelector("svg"));
+          if (r) {
+            this.$refs.tplStage.style.aspectRatio = `${r}`;
+            this.$refs.tplPreview.style.aspectRatio = `${r}`;
+          }
+        }
+        this.regions = d.elements;
+        this.tplBox = d.viewBox;
+        this.slotMap = {};
+        for (const e of d.elements) if (e.slot) this.slotMap[e.id] = e.slot;
+        this.drawRegions();
+      } catch (e) {
+        this.status(e.message, false);
+      }
+    },
+    fmtSet() {
+      const f = this.cfgParse()?.output?.formats;
+      return Array.isArray(f)
+        ? f.map((x) =>
+            String(x)
+              .toLowerCase()
+              .replace(/^jpeg$/, "jpg"),
+          )
+        : [];
+    },
+    fmtHas(f) {
+      return this.fmtSet().includes(f);
+    },
+    fmtToggle(f) {
+      this.patch((o) => {
+        const cur = (o.output?.formats || []).map((x) =>
+          String(x)
+            .toLowerCase()
+            .replace(/^jpeg$/, "jpg"),
+        );
+        const next = cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f];
+        o.output ||= {};
+        o.output.formats = next;
+      });
+    },
 
     // -- template mapping --------------------------------------
     elsFor(slot) {
@@ -658,6 +751,7 @@ document.addEventListener("alpine:init", () => {
           `/api/save?name=${encodeURIComponent(name)}`,
           this.configText,
         );
+        this.savedText = this.configText;
         this.status(`saved configs/${name}.json`, true);
       } catch (e) {
         this.status(e.message, false);

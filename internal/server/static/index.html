@@ -306,6 +306,33 @@
         font-size: 13px;
         color: var(--dim);
       }
+      #gs > label {
+        display: block;
+        margin: 6px 0 4px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+      #gs .input,
+      #gs .select,
+      #gs .select select {
+        width: 100%;
+      }
+      #gs .gs-lbl {
+        margin: 8px 0 2px;
+        font-size: 12px;
+        color: var(--dim);
+      }
+      #gs .fmt-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+      }
+      #gs .fmt-row label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+      }
       #se-body label {
         display: block;
         margin: 8px 0 2px;
@@ -419,8 +446,43 @@
     <div class="columns">
       <div class="column">
         <section class="card">
-          <div class="h2">global settings</div>
-          <div class="body">
+          <div class="h2">
+            global settings
+            <span class="h2-tools">
+              <button
+                type="button"
+                class="button is-small"
+                title="save config"
+                x-bind:hidden="!cfgDirty()"
+                x-on:click="save()"
+                hidden
+              >
+                save
+              </button>
+            </span>
+          </div>
+          <div class="body" id="gs">
+            <label
+              >name<input
+                class="input is-small"
+                type="text"
+                x-bind:value="cfgName()"
+                x-on:input="nameChanged($event.target.value)"
+                aria-label="config name"
+            /></label>
+            <label
+              >template
+              <span class="select is-small">
+                <select
+                  x-bind:value="templatePath()"
+                  x-on:change="tplChanged($event.target.value)"
+                >
+                  <template x-for="t in tplOptions()" :key="t.path">
+                    <option x-bind:value="t.path" x-text="t.name"></option>
+                  </template>
+                </select>
+              </span>
+            </label>
             <label
               >font
               <span
@@ -441,6 +503,40 @@
                 Aa…
               </button></label
             >
+            <div class="gs-lbl">output formats</div>
+            <div class="fmt-row">
+              <label title="always written — the master output"
+                ><input type="checkbox" checked disabled />svg</label
+              >
+              <label
+                ><input
+                  type="checkbox"
+                  x-bind:checked="fmtHas('png')"
+                  x-on:change="fmtToggle('png')"
+                />png</label
+              >
+              <label
+                ><input
+                  type="checkbox"
+                  x-bind:checked="fmtHas('webp')"
+                  x-on:change="fmtToggle('webp')"
+                />webp</label
+              >
+              <label
+                ><input
+                  type="checkbox"
+                  x-bind:checked="fmtHas('avif')"
+                  x-on:change="fmtToggle('avif')"
+                />avif</label
+              >
+              <label title="optional — see jpegQuality/jpegBackground"
+                ><input
+                  type="checkbox"
+                  x-bind:checked="fmtHas('jpg')"
+                  x-on:change="fmtToggle('jpg')"
+                />jpeg</label
+              >
+            </div>
           </div>
         </section>
         <section class="card">

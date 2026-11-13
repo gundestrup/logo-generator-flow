@@ -47,6 +47,7 @@ func Mux(h *handler, onShutdown func()) *http.ServeMux {
 	mux.HandleFunc("GET /api/site", h.site)
 	mux.HandleFunc("GET /api/images", h.assetList("assets/images", "images"))
 	mux.HandleFunc("GET /api/fonts", h.assetList("assets/fonts", "fonts"))
+	mux.HandleFunc("GET /api/templates", h.assetList("assets/templates", "templates"))
 	mux.HandleFunc("GET /fonts.css", h.fontsCSS)
 	mux.HandleFunc("GET /asset/", h.assetFile)
 	mux.HandleFunc("GET /out/", h.outputFile)
@@ -803,6 +804,7 @@ func (h *handler) tplAnalyze(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"elements": analyzeTemplate(string(b)),
 		"viewBox":  vb,
+		"svg":      string(b),
 	})
 }
 
