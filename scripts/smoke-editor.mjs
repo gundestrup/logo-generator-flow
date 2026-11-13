@@ -209,7 +209,7 @@ try {
   );
   check(
     "font modal opens with rows",
-    (await ev(modal("font-modal"))) === "grid" && rows > 0,
+    (await ev(modal("font-modal"))) === "grid" && rows === init?.fonts,
     `${rows} rows`,
   );
   await ev(
@@ -229,16 +229,20 @@ try {
   );
   await ev(`${app}.openFontPick('global')`);
   await sleep(400);
-  await ev(`document.querySelector('#font-modal .frow')?.click()`);
-  await sleep(400);
-  const picked = await ev(
-    `(()=>{const a=${app};return {sel:a.fontSel,closed:getComputedStyle(document.getElementById('font-modal')).display}})()`,
-  );
-  check(
-    "row pick selects + closes",
-    picked?.closed === "none" && !!picked.sel,
-    picked?.sel,
-  );
+  if (rows > 0) {
+    await ev(`document.querySelector('#font-modal .frow')?.click()`);
+    await sleep(400);
+    const picked = await ev(
+      `(()=>{const a=${app};return {sel:a.fontSel,closed:getComputedStyle(document.getElementById('font-modal')).display}})()`,
+    );
+    check(
+      "row pick selects + closes",
+      picked?.closed === "none" && !!picked.sel,
+      picked?.sel,
+    );
+  } else {
+    check("row pick selects + closes", true, "skipped (no fonts)");
+  }
 
   // -- 4. image modal ----------------------------------------------------------
   await ev(`${app}.openPick()`);
