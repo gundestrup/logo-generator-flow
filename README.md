@@ -14,7 +14,7 @@
 
 [ci-badge]: https://github.com/gundestrup/logo-generator-flow/actions/workflows/ci.yml/badge.svg
 [ci-workflow]: https://github.com/gundestrup/logo-generator-flow/actions/workflows/ci.yml
-[version-badge]: https://img.shields.io/badge/version-0.3.0-blue.svg
+[version-badge]: https://img.shields.io/badge/version-0.3.1-blue.svg
 [changelog]: CHANGELOG.md
 
 CLI that renders per-site SVG logos from a shared `{{placeholder}}` template and
@@ -210,8 +210,9 @@ avifenc installed.
 The **site** dropdown lists each config's own `name` field (with the ⧉
 button to duplicate the current config to a new file) and accepts
 `?site=<name>` deep links. **Global settings** holds the font dropdown
-(`assets/fonts/`, real family names, each previewed in its own glyphs —
-sets `render.fontFiles` + `render.fontFamily`).
+(`assets/fonts/`, real family names, each previewed in its own glyphs, or the `Aa…` picker
+modal listing every family rendered in its own font — sets
+`render.fontFiles` + `render.fontFamily`).
 **Generated** holds a backdrop selector (checker/white/black/dark/
 custom) that only changes the CSS behind the preview, never the output.
 
