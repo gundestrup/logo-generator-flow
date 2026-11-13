@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `polygon` and `line` are mappable too, and text elements carry a
   content snippet so map labels read `"jekyll-client-…"` not just
   `auto-8`.
+- `FuzzAnalyzeFill` fuzzes the analyze→fill round-trip: every element
+  the analyzer reports must be fillable, with no orphan mappings.
 - Remap detection: each element gets a fingerprint (tag + normalized
   open tag + text) sent back in `template-fill`'s new `fps` field — if
   the template changed since the map modal scanned it, fill fails
@@ -24,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Elements inside `<!-- comments -->`, `<style>`, and `<defs>` were
+  scanned as mappable regions — they are blanked (length-preserving, so
+  splice offsets stay valid) before analysis. `data-id="…"` no longer
+  aliases the real `id` attribute.
+- Paired (non-self-closing) elements like `<rect …></rect>` could not be
+  filled as image targets — fill now locates every element by document
+  offset and swallows the adjacent close tag; fingerprints are verified
+  for real ids too, not only `auto-*`.
 - Multi-line `<text>` elements were invisible to template analysis —
   the inner-content match couldn't span newlines (`(?s)` now set on the
   element and tspan matchers).
