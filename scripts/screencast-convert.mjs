@@ -50,6 +50,20 @@ const preset = Number(opts.preset ?? 4);
 const outDir = resolve(opts.out ?? "docs/assets/demo");
 const name = opts.name ?? basename(src);
 
+// Resolve tools from fixed, root-owned directories — never via PATH, so
+// a writable dir early in PATH can never shadow the binary we run.
+const TOOL_DIRS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"];
+const toolBin = (name) => {
+  for (const d of TOOL_DIRS) {
+    const p = join(d, name);
+    if (existsSync(p)) return p;
+  }
+  throw new Error(`${name} not found in ${TOOL_DIRS.join(", ")}`);
+};
+const FFMPEG = toolBin("ffmpeg");
+const IMG2WEBP = toolBin("img2webp");
+const WEBPINFO = toolBin("webpinfo");
+
 const run = (bin, args, label) => {
   const res = spawnSync(bin, args, { encoding: "utf8" });
   if (res.status !== 0)
@@ -61,7 +75,7 @@ const work = mkdtempSync(join(tmpdir(), "demo-convert-"));
 const scaledDir = join(work, "scaled");
 mkdirSync(scaledDir, { recursive: true });
 run(
-  "ffmpeg",
+  FFMPEG,
   [
     "-hide_banner",
     "-loglevel",
@@ -88,7 +102,7 @@ const base = join(outDir, name);
 
 // 1. APNG — lossless frames straight through ffmpeg's apng muxer.
 run(
-  "ffmpeg",
+  FFMPEG,
   [
     "-hide_banner",
     "-loglevel",
@@ -110,7 +124,7 @@ run(
 // 2. Animated WebP — img2webp (no libwebp in this ffmpeg). -d is the
 //    per-frame delay in ms matching the frame rate.
 run(
-  "img2webp",
+  IMG2WEBP,
   [
     "-loop",
     "0",
@@ -130,7 +144,7 @@ run(
 
 // 3. Animated AVIF — ffmpeg's avif muxer + SVT-AV1 sequence encode.
 run(
-  "ffmpeg",
+  FFMPEG,
   [
     "-hide_banner",
     "-loglevel",
@@ -156,7 +170,7 @@ run(
 // 4. SVG — self-contained wrapper around a raster animation (animates
 //    inside <img>; needs no JS, unlike foreignObject/script players).
 const svgPayload = opts["svg-payload"] === "avif" ? "avif" : "webp";
-const info = spawnSync("webpinfo", ["-summary", `${base}.webp`], {
+const info = spawnSync(WEBPINFO, ["-summary", `${base}.webp`], {
   encoding: "utf8",
 }).stdout;
 const dims = info.match(/Canvas size\s*:\s*(\d+) x (\d+)/) ?? [0, 880, 560];
