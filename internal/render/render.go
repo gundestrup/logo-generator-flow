@@ -149,7 +149,25 @@ var fontMIME = map[string]string{
 // It keeps logo.svg self-contained: browsers show the right font without
 // local installs (resvg rasterization ignores the rules either way).
 func embedUsedFonts(svg []byte, c config.Config) []byte {
-	files := map[string]string{} // family → font file
+	files := fontFiles(c)
+	if len(files) == 0 {
+		return svg
+	}
+	names := usedFamilies(string(svg), files)
+	if len(names) == 0 {
+		return svg
+	}
+	rules := fontFaceDataURIs(files, names)
+	if rules == "" {
+		return svg
+	}
+	return injectStyleTag(svg, rules)
+}
+
+// fontFiles collects family → font file from the fonts dir plus explicit
+// config entries (which win over the dir scan).
+func fontFiles(c config.Config) map[string]string {
+	files := map[string]string{}
 	if c.Render.FontsDir != "" {
 		files = fonts.Index(c.Render.FontsDir)
 	}
@@ -158,11 +176,14 @@ func embedUsedFonts(svg []byte, c config.Config) []byte {
 			files[fam] = f // explicit config wins over dir scan
 		}
 	}
-	if len(files) == 0 {
-		return svg
-	}
+	return files
+}
+
+// usedFamilies returns the sorted font families the SVG references that
+// we have a file for.
+func usedFamilies(svg string, files map[string]string) []string {
 	used := map[string]bool{}
-	for _, m := range fontFamilyRef.FindAllStringSubmatch(string(svg), -1) {
+	for _, m := range fontFamilyRef.FindAllStringSubmatch(svg, -1) {
 		v := m[1]
 		if v == "" {
 			v = m[2]
@@ -177,14 +198,17 @@ func embedUsedFonts(svg []byte, c config.Config) []byte {
 			}
 		}
 	}
-	if len(used) == 0 {
-		return svg
-	}
 	names := make([]string, 0, len(used))
 	for fam := range used {
 		names = append(names, fam)
 	}
 	sort.Strings(names)
+	return names
+}
+
+// fontFaceDataURIs builds @font-face rules embedding each font file as a
+// base64 data URI so the SVG is self-contained.
+func fontFaceDataURIs(files map[string]string, names []string) string {
 	var rules strings.Builder
 	for _, fam := range names {
 		mime := fontMIME[strings.ToLower(filepath.Ext(files[fam]))]
@@ -198,9 +222,11 @@ func embedUsedFonts(svg []byte, c config.Config) []byte {
 		fmt.Fprintf(&rules, `@font-face{font-family:'%s';src:url(data:%s;base64,%s)}`,
 			strings.ReplaceAll(fam, "'", ""), mime, base64.StdEncoding.EncodeToString(raw))
 	}
-	if rules.Len() == 0 {
-		return svg
-	}
+	return rules.String()
+}
+
+// injectStyleTag inserts <style>…</style> just inside the root <svg> tag.
+func injectStyleTag(svg []byte, rules string) []byte {
 	i := bytes.Index(svg, []byte("<svg"))
 	if i < 0 {
 		return svg
@@ -212,7 +238,7 @@ func embedUsedFonts(svg []byte, c config.Config) []byte {
 	j += i
 	out := append([]byte{}, svg[:j+1]...)
 	out = append(out, "<style>"...)
-	out = append(out, rules.String()...)
+	out = append(out, rules...)
 	out = append(out, "</style>"...)
 	out = append(out, svg[j+1:]...)
 	return out

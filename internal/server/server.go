@@ -310,7 +310,27 @@ func (h *handler) injectFontFaces(svg string, cfg config.Config) string {
 	if dir == "" {
 		dir = "assets/fonts"
 	}
-	fams := map[string]string{} // family → font file
+	fams := h.svgFontFaces(svg, cfg, dir)
+	if len(fams) == 0 {
+		return svg
+	}
+	names := make([]string, 0, len(fams))
+	for fam := range fams {
+		names = append(names, fam)
+	}
+	sort.Strings(names)
+	var rules strings.Builder
+	for _, fam := range names {
+		fmt.Fprintf(&rules, `@font-face{font-family:'%s';font-display:swap;src:url('/asset/fonts/%s')}`,
+			fam, url.PathEscape(filepath.Base(fams[fam])))
+	}
+	return spliceStyleTag(svg, rules.String())
+}
+
+// svgFontFaces collects family → font file for every family the SVG
+// references: configured fontFiles first, then assets/fonts matches.
+func (h *handler) svgFontFaces(svg string, cfg config.Config, dir string) map[string]string {
+	fams := map[string]string{}
 	for _, f := range cfg.Render.FontFiles {
 		if filepath.ToSlash(filepath.Dir(f)) != filepath.ToSlash(dir) {
 			continue
@@ -341,19 +361,11 @@ func (h *handler) injectFontFaces(svg string, cfg config.Config) string {
 			}
 		}
 	}
-	if len(fams) == 0 {
-		return svg
-	}
-	names := make([]string, 0, len(fams))
-	for fam := range fams {
-		names = append(names, fam)
-	}
-	sort.Strings(names)
-	var rules strings.Builder
-	for _, fam := range names {
-		fmt.Fprintf(&rules, `@font-face{font-family:'%s';font-display:swap;src:url('/asset/fonts/%s')}`,
-			fam, url.PathEscape(filepath.Base(fams[fam])))
-	}
+	return fams
+}
+
+// spliceStyleTag injects <style>…</style> just inside the root <svg> tag.
+func spliceStyleTag(svg, rules string) string {
 	i := strings.Index(svg, "<svg")
 	if i < 0 {
 		return svg
@@ -366,7 +378,7 @@ func (h *handler) injectFontFaces(svg string, cfg config.Config) string {
 	if svg[j-1] == '/' { // self-closing <svg/> — nothing to style
 		return svg
 	}
-	return svg[:j+1] + "<style>" + rules.String() + "</style>" + svg[j+1:]
+	return svg[:j+1] + "<style>" + rules + "</style>" + svg[j+1:]
 }
 
 // cssSafe strips characters that could break out of a single-quoted CSS
@@ -702,86 +714,102 @@ func analyzeTemplate(svg string) []tplElement {
 			e.ID = fmt.Sprintf("auto-%d", e.Ord)
 		}
 		if e.Tag == "text" {
-			inner := tplEntRe.ReplaceAllString(
-				tplInnerRe.ReplaceAllString(svg[e.Inner[0]:e.Inner[1]], ""), "x")
-			e.Text = strings.Join(strings.Fields(inner), " ")
-			if utf8.RuneCountInString(e.Text) > 40 {
-				e.Text = string([]rune(e.Text)[:40])
-			}
+			e.Text = tplTextLabel(svg[e.Inner[0]:e.Inner[1]])
 		}
 		e.Fp = tplFingerprint(e.Tag, openTag, e.Text)
 		if p := config.Placeholder.FindStringSubmatch(match); p != nil {
 			e.Slot = p[1]
 		}
-		switch e.Tag {
-		case "path", "polygon":
-			var nums []string
-			if e.Tag == "polygon" {
-				if pm := tplPointsRe.FindStringSubmatch(match); pm != nil {
-					nums = tplNumRe.FindAllString(pm[1], -1)
-				}
-			} else if dm := tplDRe.FindStringSubmatch(match); dm != nil {
-				nums = tplNumRe.FindAllString(dm[1], -1)
-			}
-			for i := 0; i+1 < len(nums); i += 2 {
-				x, y := atof(nums[i]), atof(nums[i+1])
-				if e.W == 0 && e.H == 0 && i == 0 {
-					e.X, e.Y = x, y
-				}
-				e.X, e.Y = min(e.X, x), min(e.Y, y)
-				e.W, e.H = max(e.W, x), max(e.H, y)
-			}
-			e.W, e.H = e.W-e.X, e.H-e.Y
-		case "text":
-			// No bbox exists without rendering — estimate one for the
-			// editor's region overlay: position from matrix()/translate()/
-			// x= y= attrs, size from font-size x text length. The y attr is
-			// the baseline, so the box extends above it.
-			if t := tplXYRe.FindStringSubmatch(match); t != nil {
-				e.X, e.Y = atof(t[1]), atof(t[2])
-			} else if t := tplTransRe.FindStringSubmatch(match); t != nil {
-				e.X, e.Y = atof(t[1]), atof(t[2])
-			} else {
-				attrs := map[string]float64{}
-				for _, a := range tplAttrRe.FindAllStringSubmatch(openTag, -1) {
-					attrs[a[1]] = atof(a[2])
-				}
-				e.X, e.Y = attrs["x"], attrs["y"]
-			}
-			size := 24.0
-			if fs := tplFontSizeRe.FindStringSubmatch(match); fs != nil {
-				size = atof(fs[1])
-			}
-			e.W = float64(utf8.RuneCountInString(e.Text)) * size * 0.6
-			e.W = max(e.W, size)
-			e.H = size * 1.2
-			if a := tplAnchorRe.FindStringSubmatch(match); a != nil {
-				if a[1] == "middle" {
-					e.X -= e.W / 2
-				} else {
-					e.X -= e.W
-				}
-			}
-			e.Y -= size * 0.9
-		case "circle":
-			attrs := tplAttrs(match)
-			e.X, e.Y = attrs["cx"]-attrs["r"], attrs["cy"]-attrs["r"]
-			e.W, e.H = 2*attrs["r"], 2*attrs["r"]
-		case "ellipse":
-			attrs := tplAttrs(match)
-			e.X, e.Y = attrs["cx"]-attrs["rx"], attrs["cy"]-attrs["ry"]
-			e.W, e.H = 2*attrs["rx"], 2*attrs["ry"]
-		case "line":
-			attrs := tplAttrs(match)
-			e.X, e.W = min(attrs["x1"], attrs["x2"]), max(math.Abs(attrs["x2"]-attrs["x1"]), 1)
-			e.Y, e.H = min(attrs["y1"], attrs["y2"]), max(math.Abs(attrs["y2"]-attrs["y1"]), 1)
-		default:
-			attrs := tplAttrs(match)
-			e.X, e.Y, e.W, e.H = attrs["x"], attrs["y"], attrs["width"], attrs["height"]
-		}
+		tplBBox(&e, match, openTag)
 		els = append(els, e)
 	}
 	return els
+}
+
+// tplTextLabel extracts a short human-readable label from a <text>
+// element's inner markup for the map-template list.
+func tplTextLabel(inner string) string {
+	inner = tplEntRe.ReplaceAllString(tplInnerRe.ReplaceAllString(inner, ""), "x")
+	s := strings.Join(strings.Fields(inner), " ")
+	if utf8.RuneCountInString(s) > 40 {
+		s = string([]rune(s)[:40])
+	}
+	return s
+}
+
+// tplBBox fills e's bounding box according to its tag kind.
+func tplBBox(e *tplElement, match, openTag string) {
+	switch e.Tag {
+	case "path", "polygon":
+		coordPairBBox(e, match)
+	case "text":
+		textBBox(e, match, openTag)
+	case "circle":
+		attrs := tplAttrs(match)
+		e.X, e.Y = attrs["cx"]-attrs["r"], attrs["cy"]-attrs["r"]
+		e.W, e.H = 2*attrs["r"], 2*attrs["r"]
+	case "ellipse":
+		attrs := tplAttrs(match)
+		e.X, e.Y = attrs["cx"]-attrs["rx"], attrs["cy"]-attrs["ry"]
+		e.W, e.H = 2*attrs["rx"], 2*attrs["ry"]
+	case "line":
+		attrs := tplAttrs(match)
+		e.X, e.W = min(attrs["x1"], attrs["x2"]), max(math.Abs(attrs["x2"]-attrs["x1"]), 1)
+		e.Y, e.H = min(attrs["y1"], attrs["y2"]), max(math.Abs(attrs["y2"]-attrs["y1"]), 1)
+	default:
+		attrs := tplAttrs(match)
+		e.X, e.Y, e.W, e.H = attrs["x"], attrs["y"], attrs["width"], attrs["height"]
+	}
+}
+
+// coordPairBBox boxes a path/polygon as min/max over coordinate pairs.
+func coordPairBBox(e *tplElement, match string) {
+	var nums []string
+	if e.Tag == "polygon" {
+		if pm := tplPointsRe.FindStringSubmatch(match); pm != nil {
+			nums = tplNumRe.FindAllString(pm[1], -1)
+		}
+	} else if dm := tplDRe.FindStringSubmatch(match); dm != nil {
+		nums = tplNumRe.FindAllString(dm[1], -1)
+	}
+	for i := 0; i+1 < len(nums); i += 2 {
+		x, y := atof(nums[i]), atof(nums[i+1])
+		if e.W == 0 && e.H == 0 && i == 0 {
+			e.X, e.Y = x, y
+		}
+		e.X, e.Y = min(e.X, x), min(e.Y, y)
+		e.W, e.H = max(e.W, x), max(e.H, y)
+	}
+	e.W, e.H = e.W-e.X, e.H-e.Y
+}
+
+// textBBox estimates a <text> box (no renderer exists): position from
+// matrix()/translate()/x y attrs, size from font-size x text length. The
+// y attr is the baseline, so the box extends above it.
+func textBBox(e *tplElement, match, openTag string) {
+	if t := tplXYRe.FindStringSubmatch(match); t != nil {
+		e.X, e.Y = atof(t[1]), atof(t[2])
+	} else if t := tplTransRe.FindStringSubmatch(match); t != nil {
+		e.X, e.Y = atof(t[1]), atof(t[2])
+	} else {
+		attrs := tplAttrs(openTag)
+		e.X, e.Y = attrs["x"], attrs["y"]
+	}
+	size := 24.0
+	if fs := tplFontSizeRe.FindStringSubmatch(match); fs != nil {
+		size = atof(fs[1])
+	}
+	e.W = float64(utf8.RuneCountInString(e.Text)) * size * 0.6
+	e.W = max(e.W, size)
+	e.H = size * 1.2
+	if a := tplAnchorRe.FindStringSubmatch(match); a != nil {
+		if a[1] == "middle" {
+			e.X -= e.W / 2
+		} else {
+			e.X -= e.W
+		}
+	}
+	e.Y -= size * 0.9
 }
 
 func tplAttrs(tag string) map[string]float64 {
