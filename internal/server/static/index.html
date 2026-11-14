@@ -607,12 +607,11 @@
             </div>
             <div class="body" id="map-list">
               <template x-for="slot in allSlots" :key="slot">
-                <div class="map-row">
+                <label class="map-row">
                   <code x-text="slot"></code> →
                   <span class="select is-small">
                     <select
                       x-model="mapAssign[slot]"
-                      x-bind:aria-label="slot"
                       x-on:change="mapAssigned(slot)"
                     >
                       <option value="">—</option>
@@ -624,7 +623,7 @@
                       </template>
                     </select>
                   </span>
-                </div>
+                </label>
               </template>
             </div>
           </section>

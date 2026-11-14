@@ -706,7 +706,7 @@ document.addEventListener("alpine:init", () => {
         );
         await this.loadSites();
         this.site = to;
-        this.loadSite(to);
+        await this.loadSite(to);
         this.status(`duplicated → configs/${to}.json`, true);
       } catch (e) {
         this.status(e.message, false);
@@ -723,7 +723,7 @@ document.addEventListener("alpine:init", () => {
         );
         await this.loadSites();
         this.site = to;
-        this.loadSite(to);
+        await this.loadSite(to);
         this.status(`renamed → configs/${to}.json`, true);
       } catch (e) {
         this.status(e.message, false);
