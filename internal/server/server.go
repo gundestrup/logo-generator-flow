@@ -195,7 +195,9 @@ func cacheStatic(next http.Handler) http.Handler {
 func (h *handler) favicon(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "image/svg+xml")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
-	_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" rx="4" fill="#0b1220"/><path d="M4 8h8M8 4v8" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/></svg>`))
+	b, _ := staticFS.ReadFile("static/favicon.svg")
+	// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- serving fixed embedded bytes, not user input
+	_, _ = w.Write(b)
 }
 
 // siteEntry is one configs/*.json file: file is the API key (basename
