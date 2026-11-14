@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-14
+
+### Fixed
+
+- `screencast-convert.mjs` resolves ffmpeg/img2webp/webpinfo from fixed
+  system dirs instead of PATH (code-scanning S4036; also fails loudly
+  with a clear error when a tool is missing).
+
 ## [0.5.1] - 2026-11-14
 
 ### Changed
