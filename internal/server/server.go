@@ -178,6 +178,7 @@ func (h *handler) configPath(name string) (string, error) {
 func (h *handler) index(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	b, _ := staticFS.ReadFile("static/index.html")
+	// nosemgrep: go.lang.security.audit.xss.no-direct-write-to-responsewriter.no-direct-write-to-responsewriter -- serving fixed embedded bytes, not user input
 	_, _ = w.Write(b)
 }
 
@@ -296,6 +297,7 @@ func (h *handler) fontsCSS(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
+	// nosemgrep: go.lang.security.audit.xss.no-io-writestring-to-responsewriter.no-io-writestring-to-responsewriter -- generated fonts.css served as text/css from local font metadata
 	_, _ = io.WriteString(w, rules.String())
 }
 
@@ -431,6 +433,7 @@ func (h *handler) renderAll(w http.ResponseWriter, r *http.Request) {
 	}
 	send := func(v any) {
 		b, _ := json.Marshal(v)
+		// nosemgrep: go.lang.security.audit.xss.no-fprintf-to-responsewriter.no-fprintf-to-responsewriter -- SSE frame; b is json.Marshal'd, content is text/event-stream
 		_, _ = fmt.Fprintf(w, "data: %s\n\n", b)
 		fl.Flush()
 	}

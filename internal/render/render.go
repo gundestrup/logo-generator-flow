@@ -546,6 +546,7 @@ func toolPath(configured, name string) (string, error) {
 
 func run(name string, args ...string) error {
 	// #nosec G204 -- tool binary resolved from config/PATH; exec is the feature.
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command -- invoking resvg/cwebp/avifenc IS the tool's purpose; paths come from the site config
 	cmd := exec.Command(name, args...)
 	var out bytes.Buffer
 	cmd.Stdout = io.MultiWriter(os.Stdout, &out)

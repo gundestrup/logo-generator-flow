@@ -96,6 +96,12 @@ document.addEventListener("alpine:init", () => {
       void this.loadSites();
       void this.loadFonts();
       void this.loadTemplates();
+      window.addEventListener("keydown", (e) => {
+        if (e.key !== "Escape") return;
+        this.fontModalOpen = false;
+        this.modalOpen = false;
+        this.mapOpen = false;
+      });
       // click an svg element directly (not just its region box)
       this.$refs.tpl.addEventListener("click", (e) => {
         const n = e.target.closest("[id]");
