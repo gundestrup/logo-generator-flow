@@ -11,7 +11,11 @@
 [![Go 1.27+](https://img.shields.io/badge/Go-1.27%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Version][version-badge]][changelog]
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/gundestrup/logo-generator-flow)
+<!-- markdownlint-disable MD033 -->
+
+[<img src="https://devin.ai/assets/askdeepwiki.png" alt="Ask DeepWiki" height="20"/>](https://deepwiki.com/gundestrup/logo-generator-flow)
+<!-- markdownlint-enable MD033 -->
+
 [![Render: resvg](https://img.shields.io/badge/render-resvg-orange)](https://github.com/linebender/resvg)
 [![Encode: libwebp](https://img.shields.io/badge/encode-libwebp-green)](https://developers.google.com/speed/webp)
 [![Encode: libavif](https://img.shields.io/badge/encode-libavif-blueviolet)](https://github.com/AOMediaCodec/libavif)
