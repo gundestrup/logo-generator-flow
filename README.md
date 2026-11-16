@@ -1,4 +1,8 @@
-# logo-generator
+<!-- markdownlint-disable MD013 MD033 -->
+
+# logo-generator <a href="https://gundestrup.github.io/flow/"><img align="right" src="https://gundestrup.github.io/flow/assets/badges/part-of-flow.svg?v=2" alt="Part of Flow software" height="40"></a>
+
+<!-- markdownlint-enable MD013 MD033 -->
 
 [![CI][ci-badge]][ci-workflow]
 [![CodeFactor](https://www.codefactor.io/repository/github/gundestrup/logo-generator-flow/badge)](https://www.codefactor.io/repository/github/gundestrup/logo-generator-flow)
