@@ -20,6 +20,6 @@
     "@alpinejs/csp": "3.17.5",
     "@biomejs/biome": "2.6.6",
     "bulma": "1.0.4",
-    "prettier": "3.9.10"
+    "prettier": "3.10.1"
   }
 }
