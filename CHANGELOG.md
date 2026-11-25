@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- npm dev-deps: `prettier` 3.9.10 → 3.10.1, `@biomejs/biome` 2.6.6 →
+  2.6.8 (`min-release-age=7` filtered `biome` 2.6.9 — eligible for the
+  next sweep).
+
 ## [0.5.2] - 2026-11-14
 
 ### Fixed
